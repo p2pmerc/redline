@@ -1,3 +1,4 @@
+import { ProfileAvatar, sampleSeed } from "@/components/ui/profile-avatar";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Megaphone, FileMd, FilePdf, ShieldCheck, ArrowSquareOut, Compass, HouseLine } from "@phosphor-icons/react";
 import { SiteHeader } from "@/components/layout/site-header";
@@ -56,9 +57,13 @@ export function DisclosureDetailPage() {
             <div className="space-y-3">
               <div className="flex flex-wrap gap-1.5">
                 <Badge color={severityTone[data.severity]} className="capitalize">{data.severity}</Badge>
-                <Badge color="green"><ShieldCheck size={11} /> Fixed and paid</Badge>
+                {data.escrow ? <Badge color="green"><ShieldCheck size={11} /> Fixed and paid</Badge> : <Badge color="gray"><ShieldCheck size={11} /> Disclosed</Badge>}
               </div>
               <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight">{data.title}</h1>
+              <span className="inline-flex items-center gap-2 text-subtitle">
+                <ProfileAvatar size="md" name="Researcher" seed={data.researcherSeed ?? (data.sample ? sampleSeed(`researcher:${data.id}`) : undefined)} />
+                <span className="font-medium">Researcher</span>
+              </span>
               <p className="text-caption text-muted-foreground">
                 {data.target} · published {shortDate(data.updatedAt)} · reward {formatNear(data.rewardNear)} · body hash <span className="font-mono">{shortHash(data.contentHash)}</span>
               </p>
