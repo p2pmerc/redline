@@ -114,4 +114,21 @@ export interface Report {
   bodyLocked?: boolean;
   publishedAt?: string;
   evidenceHash?: string;
+  /** Public pages only: who filed it, when they have a profile. */
+  researcherHandle?: string;
+  researcherName?: string;
+  /** Public pages only: false when the report was paid but never unsealed. */
+  bodyPublished?: boolean;
 }
+
+export interface ResearcherProfile {
+  handle: string;
+  displayName: string;
+  bio: string;
+  skills: string[];
+  links: { github?: string; x?: string; website?: string };
+  avatarSeed: string;
+  joinedAt?: string;
+}
+
+export interface ResearcherStats { reports: number; paid: number; disclosed: number; totalPaidNear: number }

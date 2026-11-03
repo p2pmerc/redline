@@ -1,6 +1,6 @@
 import { api, ApiError } from "./api-client";
 import { redlineConfig } from "./redline-config";
-import type { EscrowState, InviteRecipient, NegotiationMessage, ProposedTerms, Report, ReportRole, ReportStage, Severity, TimelineEvent } from "./redline-types";
+import type { EscrowState, InviteRecipient, NegotiationMessage, ProposedTerms, Report, ReportRole, ResearcherProfile, ResearcherStats, ReportStage, Severity, TimelineEvent } from "./redline-types";
 import { getReportKey, saveReportKey, takeInviteKey } from "./report-key-vault";
 import { encryptWithKey, openReportBody, sealReportBody } from "./report-encryption";
 
@@ -42,10 +42,14 @@ interface PublicView {
   publishedAt: string;
   createdAt: string;
   contentHash: string;
-  evidenceHash: string;
+  evidenceHash?: string;
   outcome: "fixed_and_paid" | "refunded" | "disclosed";
   rewardNear?: number;
   researcherSeed?: string;
+  researcherHandle?: string;
+  researcherName?: string;
+  bodyPublished: boolean;
+  pullRequestUrl?: string;
   timeline: TimelineEvent[];
 }
 
@@ -84,11 +88,12 @@ async function toReport(view: PartyView): Promise<Report> {
 function fromPublic(view: PublicView): Report {
   return {
     id: view.id, title: view.title, target: view.target || "Unnamed project", repo: view.repo, severity: view.severity,
-    stage: "published", role: "researcher", counterparty: "", researcherSeed: view.researcherSeed, createdAt: view.createdAt, updatedAt: view.publishedAt,
+    stage: view.bodyPublished ? "published" : "paid", role: "researcher", counterparty: "", researcherSeed: view.researcherSeed,
+    researcherHandle: view.researcherHandle, researcherName: view.researcherName, bodyPublished: view.bodyPublished, createdAt: view.createdAt, updatedAt: view.publishedAt,
     disclosureDeadline: view.publishedAt, rewardNear: view.rewardNear, summary: view.summary, body: view.body, invites: [], messages: [],
     timeline: view.timeline, contentHash: view.contentHash, publishedAt: view.publishedAt, evidenceHash: view.evidenceHash,
     escrow: view.outcome === "fixed_and_paid" && view.rewardNear
-      ? { amountNear: view.rewardNear, funded: false, expiresAt: view.publishedAt, contractId: redlineConfig.escrowContractId, mergeCheck: "merged", mode: "testnet" } : undefined,
+      ? { amountNear: view.rewardNear, funded: false, expiresAt: view.publishedAt, contractId: redlineConfig.escrowContractId, mergeCheck: "merged", mode: "testnet", pullRequestUrl: view.pullRequestUrl } : undefined,
   };
 }
 
@@ -109,6 +114,20 @@ export async function listPublicDisclosures(): Promise<Report[]> {
 
 export async function getPublicDisclosure(id: string): Promise<Report> {
   return fromPublic(await api<PublicView>(`/public/disclosures/${encodeURIComponent(id)}`, { auth: false }));
+}
+
+export async function getPublicResearcher(handle: string): Promise<{ profile: ResearcherProfile; stats: ResearcherStats; reports: Report[] }> {
+  const view = await api<{ profile: ResearcherProfile; stats: ResearcherStats; reports: PublicView[] }>(`/public/researchers/${encodeURIComponent(handle)}`, { auth: false });
+  return { profile: view.profile, stats: view.stats, reports: view.reports.map(fromPublic) };
+}
+
+export async function getMyProfile(): Promise<ResearcherProfile | null> {
+  return (await api<{ profile: ResearcherProfile | null }>("/profile")).profile;
+}
+
+export type ProfileInput = Omit<ResearcherProfile, "joinedAt">;
+export async function saveMyProfile(input: ProfileInput): Promise<ResearcherProfile> {
+  return (await api<{ profile: ResearcherProfile }>("/profile", { method: "PUT", body: input })).profile;
 }
 
 // ---------------------------------------------------------------------- writes

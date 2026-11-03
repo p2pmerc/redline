@@ -4,9 +4,10 @@ export interface Person { name: string; seed?: string; role: "researcher" | "tea
 
 /** Both people on a report, with avatar seeds. */
 export function peopleOf(report: Report, researcherName = "Researcher"): { researcher: Person; team?: Person } {
-  const mine = report.role === "researcher";
+  const isPublic = report.bodyPublished !== undefined;
+  const mine = report.role === "researcher" && !isPublic;
   const otherName = report.counterparty && report.counterparty !== "Not joined yet" ? report.counterparty : undefined;
-  const researcherLabel = mine ? "You" : otherName ?? researcherName;
+  const researcherLabel = mine ? "You" : report.researcherName ?? otherName ?? researcherName;
   const teamLabel = !mine ? "You" : otherName;
   return {
     researcher: { name: researcherLabel, role: "researcher", seed: report.researcherSeed },
