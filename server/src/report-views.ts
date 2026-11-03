@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto";
 import type { Role, StoredReport } from "./report-records.js";
+
+/** Stable avatar seed: a hash of the account id, never the email or name, so it reveals nothing and does not change. */
+export const avatarSeed = (userId: string): string => createHash("sha256").update(`redline:avatar:v1:${userId}`).digest("hex").slice(0, 32);
 
 export type Stage = "sealed" | "invited" | "negotiating" | "agreed" | "funded" | "fix_merged" | "paid" | "published" | "refunded";
 
@@ -33,6 +37,8 @@ export function partyView(report: StoredReport, role: Role, ledgerMode: string, 
     severity: report.severity,
     stage: stageOf(report),
     role,
+    researcherSeed: avatarSeed(report.researcherId),
+    teamSeed: report.teamId ? avatarSeed(report.teamId) : undefined,
     counterparty: role === "researcher" ? report.teamName ?? "Not joined yet" : report.researcherName,
     createdAt: report.createdAt,
     updatedAt: report.updatedAt,
@@ -47,7 +53,7 @@ export function partyView(report: StoredReport, role: Role, ledgerMode: string, 
       : undefined,
     invites: report.invites.map((i) => ({
       id: i.id, channel: i.channel, handle: i.handle, status: i.status,
-      ...(role === "researcher" ? { token: i.token } : {}),
+      ...(role === "researcher" && i.status !== "revoked" ? { token: i.token } : {}),
     })),
     messages: report.messages.map((m) => ({ id: m.id, from: m.role, author: m.authorName, ciphertextHex: m.ciphertextHex, hash: m.hash, at: m.at })),
     timeline: report.timeline,
@@ -71,6 +77,7 @@ export function publicView(report: StoredReport) {
     repo: report.repo,
     severity: report.severity,
     summary: report.summary,
+    researcherSeed: avatarSeed(report.researcherId),
     body: published.body,
     publishedAt: published.at,
     createdAt: report.createdAt,

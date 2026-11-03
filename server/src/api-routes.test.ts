@@ -258,3 +258,19 @@ describe("publishing", () => {
     expect((await call(null, "GET", `/public/disclosures/${created.json.id}`)).status).toBe(404);
   });
 });
+
+describe("avatar seeds", () => {
+  it("are stable hashes of the account id, not the name, and differ per person", async () => {
+    const { created } = await newReport();
+    const id = created.json.id as string;
+    const first = (await call("user-alice", "GET", `/reports/${id}`)).json;
+    expect(first.researcherSeed).toMatch(/^[0-9a-f]{32}$/);
+    expect(first.researcherSeed).not.toContain("alice");
+    await joinTeam(id);
+    const second = (await call("user-alice", "GET", `/reports/${id}`)).json;
+    expect(second.researcherSeed).toBe(first.researcherSeed);
+    expect(second.teamSeed).toMatch(/^[0-9a-f]{32}$/);
+    expect(second.teamSeed).not.toBe(second.researcherSeed);
+    expect((await call("user-bob", "GET", `/reports/${id}`)).json.teamSeed).toBe(second.teamSeed);
+  });
+});
