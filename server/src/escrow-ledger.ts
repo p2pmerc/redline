@@ -79,6 +79,7 @@ export function acceptTerms(report: StoredReport, role: Role | undefined, now: D
 export function fundEscrow(report: StoredReport, role: Role | undefined, now: Date): void {
   requireRole(role, "team");
   if (report.status !== "terms_accepted" || !report.terms) throw new LedgerError("terms must be accepted before funding");
+  if (!report.payoutAccount) throw new LedgerError("the researcher has not set a payout NEAR account yet, so funding is blocked");
   report.escrow = {
     amountNear: report.terms.amountNear,
     fundedAt: now.toISOString(),

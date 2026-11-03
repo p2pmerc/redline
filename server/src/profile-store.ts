@@ -10,6 +10,8 @@ export interface ResearcherProfile {
   links: { github?: string; x?: string; website?: string };
   /** RoboHash seed. Random, public, and unrelated to the account id. */
   avatarSeed: string;
+  /** Testnet account that receives bounties. Private to the owner and the parties of their reports. */
+  payoutAccount?: string;
   createdAt: string;
   updatedAt: string;
 }

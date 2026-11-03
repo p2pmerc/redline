@@ -41,7 +41,8 @@ export interface TimelineEvent {
     | "payout"
     | "refund"
     | "disclosure_notice"
-    | "published";
+    | "published"
+    | "payout_account";
   title: string;
   detail?: string;
   /** NEAR testnet transaction hash, when the event is on-chain. */

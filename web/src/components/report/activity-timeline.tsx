@@ -1,6 +1,6 @@
 import {
   LockKey, PaperPlaneTilt, UserCheck, UserMinus, ChatCircleText, Signature, Coins, GitPullRequest, GitMerge,
-  HandCoins, ArrowUUpLeft, BellRinging, Megaphone, ArrowSquareOut, Scroll, type Icon,
+  HandCoins, ArrowUUpLeft, BellRinging, Megaphone, ArrowSquareOut, Scroll, Wallet, type Icon,
 } from "@phosphor-icons/react";
 import { explorerTxUrl } from "@/lib/redline-config";
 import { relativeTime, shortHash } from "@/lib/format";
@@ -22,6 +22,7 @@ export const kindIcon: Record<TimelineEvent["kind"], Icon> = {
   refund: ArrowUUpLeft,
   disclosure_notice: BellRinging,
   published: Megaphone,
+  payout_account: Wallet,
 };
 
 /** Resolves an icon for a timeline kind, including kinds a stale client has not seen yet. */

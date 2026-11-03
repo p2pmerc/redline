@@ -5,7 +5,7 @@ import { iconForKind, kindIcon } from "./activity-timeline";
 const serverKinds = [
   "sealed", "invite_sent", "invite_redeemed", "invite_revoked", "message", "terms_proposed",
   "agreement_signed", "escrow_funded", "pr_linked", "pr_merged", "payout", "refund",
-  "disclosure_notice", "published",
+  "disclosure_notice", "published", "payout_account",
 ] as const;
 
 function isRenderableIcon(Icon: unknown): boolean {

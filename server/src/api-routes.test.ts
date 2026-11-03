@@ -30,6 +30,7 @@ beforeEach(async () => {
     store: new ReportStore(null),
     verifyToken: async (t) => { if (!t.startsWith("user-")) throw new Error("bad"); return t; },
     mergeLookup: async () => answers.shift() ?? { status: "unknown" },
+    accountExists: async (id) => id !== "ghost.testnet",
     now: () => new Date(clockMs),
   });
   await new Promise<void>((r) => { server = app.listen(0, r); });
@@ -46,7 +47,10 @@ async function call(user: string | null, method: string, path: string, body?: un
   return { status: res.status, json: (await res.json()) as any };
 }
 
+const PROFILE = { handle: "alice", displayName: "Alice", avatarSeed: "abcdef12", payoutAccount: "alice.testnet" };
+
 async function newReport(text = "## Bug\nsomething secret") {
+  if (!(await call("user-alice", "GET", "/profile")).json.profile) await call("user-alice", "PUT", "/profile", PROFILE);
   const sealed = seal(text);
   const created = await call("user-alice", "POST", "/reports", {
     title: "Auth bypass in login", severity: "high", repo: "acme/widgets", disclosureDays: 30, summary: "s",
@@ -317,5 +321,44 @@ describe("researcher profiles and privacy", () => {
     expect(page.reports[0].researcherHandle).toBe("ada");
     expect(page.profile.avatarSeed).toBe("abc123def456");
     expect((await call(null, "GET", "/public/researchers/nobody")).status).toBe(404);
+  });
+});
+
+
+describe("payout account", () => {
+  it("validates the account and keeps it out of the public profile", async () => {
+    expect((await call("user-alice", "PUT", "/profile", { ...PROFILE, payoutAccount: "alice.near" })).status).toBe(400);
+    expect((await call("user-alice", "PUT", "/profile", { ...PROFILE, payoutAccount: "ghost.testnet" })).status).toBe(400);
+    const ok = await call("user-alice", "PUT", "/profile", PROFILE);
+    expect(ok.json.profile.payoutAccount).toBe("alice.testnet");
+    expect((await call(null, "GET", "/public/researchers/alice")).json.profile.payoutAccount).toBeUndefined();
+  });
+
+  it("binds the profile account at report creation and shows it to both parties", async () => {
+    const { created } = await newReport();
+    expect(created.json.payoutAccount).toBe("alice.testnet");
+    await joinTeam(created.json.id);
+    expect((await call("user-bob", "GET", `/reports/${created.json.id}`)).json.payoutAccount).toBe("alice.testnet");
+  });
+
+  it("blocks funding until the researcher sets one, then binds it when they accept", async () => {
+    const sealed = seal("x");
+    const created = await call("user-carol", "POST", "/reports", { title: "No wallet yet", severity: "low", repo: "acme/widgets", disclosureDays: 30, ciphertextHex: sealed.ciphertextHex, contentHash: sealed.contentHash });
+    const id = created.json.id as string;
+    expect(created.json.payoutAccount).toBeUndefined();
+    const invite = await call("user-carol", "POST", `/reports/${id}/invites`, { channel: "email", handle: "sec@acme.dev" });
+    await call("user-bob", "POST", `/invites/${invite.json.invites[0].token}/redeem`);
+    await call("user-bob", "POST", `/reports/${id}/terms`, { amountNear: 2, repo: "acme/widgets" });
+    await call("user-carol", "POST", `/reports/${id}/terms/accept`);
+    const blocked = await call("user-bob", "POST", `/reports/${id}/fund`);
+    expect(blocked.status).toBe(409);
+    expect(blocked.json.error).toMatch(/payout NEAR account/);
+    expect((await call("user-carol", "POST", `/reports/${id}/payout-account`)).status).toBe(409); // profile has none
+    await call("user-carol", "PUT", "/profile", { ...PROFILE, handle: "carol", payoutAccount: "carol.testnet" });
+    expect((await call("user-bob", "POST", `/reports/${id}/payout-account`)).status).toBe(403);
+    expect((await call("user-carol", "POST", `/reports/${id}/payout-account`)).json.payoutAccount).toBe("carol.testnet");
+    expect((await call("user-bob", "POST", `/reports/${id}/fund`)).json.stage).toBe("funded");
+    await call("user-carol", "PUT", "/profile", { ...PROFILE, handle: "carol", payoutAccount: "other.testnet" });
+    expect((await call("user-carol", "POST", `/reports/${id}/payout-account`)).status).toBe(409); // locked once funded
   });
 });

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { cleanName, type Caller, type TokenVerifier } from "./privy-token-verifier.js";
 import type { ReportStore } from "./report-store.js";
 import { ProfileStore, type ResearcherProfile } from "./profile-store.js";
-import type { StoredReport, TimelineEntry } from "./report-records.js";
+import type { InviteRecord, StoredReport, TimelineEntry } from "./report-records.js";
 import type { ServerConfig } from "./server-config.js";
 import type { MergeLookup } from "./github-merge-lookup.js";
 import * as ledger from "./escrow-ledger.js";
@@ -13,6 +13,8 @@ import { isPublic, partyView, publicView, roleOf, summaryView, type PublicAuthor
 import { openCiphertext } from "./report-ciphertext.js";
 import { ChainError, type ChainRelay } from "./chain-relay.js";
 import { sendInviteEmail } from "./invite-email.js";
+import { exclusive, NEAR_CHECK_DEPOSIT, runClaim, runMergeCheck, settled, stamp, verdictOf, type SettlementContext } from "./settlement.js";
+import { isTestnetAccountId, type AccountChecker } from "./near-account.js";
 
 export interface ApiDeps {
   config: ServerConfig;
@@ -22,6 +24,8 @@ export interface ApiDeps {
   mergeLookup: MergeLookup;
   /** Signs contract calls for the demo parties. Needed when the ledger mode is "testnet". */
   relay?: ChainRelay;
+  /** Looks up a testnet account. Defaults to accepting well-formed ids when not given. */
+  accountExists?: AccountChecker;
   now?: () => Date;
 }
 
@@ -44,6 +48,7 @@ const profileBody = z.object({
   skills: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
   links: z.object({ github: linkField(["github.com"]), x: linkField(["x.com", "twitter.com"]), website: websiteField }).default({ github: undefined, x: undefined, website: undefined }),
   avatarSeed: z.string().regex(/^[a-z0-9]{6,32}$/i),
+  payoutAccount: z.string().trim().toLowerCase().max(64).optional().transform((v) => v || undefined),
 });
 
 const createReportBody = z.object({
@@ -94,8 +99,16 @@ class HttpError extends Error {
 
 const sha256 = (hexString: string) => createHash("sha256").update(Buffer.from(hexString, "hex")).digest("hex");
 const NEAR_FEE = 10n ** 22n; // 0.01 NEAR registration storage fee
-const NEAR_CHECK_DEPOSIT = 5n * 10n ** 22n; // 0.05 NEAR pays for one enclave run, the unused part is refunded
 const newId = () => `rl-${randomBytes(6).toString("hex")}`;
+
+/** The GitHub login in a profile link such as https://github.com/p2pmerc. */
+export function githubLoginFromLink(link?: string): string | undefined {
+  if (!link) return undefined;
+  try {
+    const part = new URL(link).pathname.split("/").filter(Boolean)[0];
+    return part ? part.replace(/^@/, "").toLowerCase() : undefined;
+  } catch { return undefined; }
+}
 
 type AuthedRequest = Request & { caller: Caller };
 
@@ -107,15 +120,8 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     return relay;
   };
   const profiles = deps.profiles ?? new ProfileStore(null);
-  const githubLoginOf = (userId: string): string | undefined => {
-    const link = profiles.get(userId)?.links.github;
-    if (!link) return undefined;
-    try {
-      const u = new URL(link);
-      const part = u.pathname.split("/").filter(Boolean)[0];
-      return part ? part.replace(/^@/, "").toLowerCase() : undefined;
-    } catch { return undefined; }
-  };
+  const githubLoginOf = (userId: string): string | undefined => githubLoginFromLink(profiles.get(userId)?.links.github);
+  const settlement: SettlementContext = { live, relay, mergeLookup, now: () => (deps.now ?? (() => new Date()))(), githubLoginOf };
   const authorOf = (userId: string): PublicAuthor | undefined => {
     const p = profiles.get(userId);
     return p ? { handle: p.handle, displayName: p.displayName, avatarSeed: p.avatarSeed } : undefined;
@@ -140,11 +146,11 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     } catch {
       return next(new HttpError(401, "Your session expired. Sign in again."));
     }
-    (req as AuthedRequest).caller = { userId, name: cleanName(req.header("x-redline-name")) };
+    (req as unknown as AuthedRequest).caller = { userId, name: cleanName(req.header("x-redline-name")) };
     next();
   };
 
-  const caller = (req: Request) => (req as AuthedRequest).caller;
+  const caller = (req: Request) => (req as unknown as AuthedRequest).caller;
   const party = (req: Request) => {
     const report = store.get(String(req.params.id));
     const role = report ? roleOf(report, caller(req).userId) : undefined;
@@ -196,22 +202,32 @@ export function createApiRouter(deps: ApiDeps): express.Router {
   // ------------------------------------------------------------------ authenticated
   router.use(requireAuth);
 
+  const ownProfile = (p: ResearcherProfile) => ({ ...publicProfile(p), payoutAccount: p.payoutAccount });
+
   router.get("/profile", (req, res) => {
     const p = profiles.get(caller(req).userId);
-    res.json({ profile: p ? publicProfile(p) : null });
+    res.json({ profile: p ? ownProfile(p) : null });
   });
 
-  router.put("/profile", (req, res) => {
+  router.put("/profile", handler(async (req, res) => {
     const { userId } = caller(req);
     const input = profileBody.parse(req.body);
     const taken = profiles.byHandle(input.handle);
     if (taken && taken.userId !== userId) throw new HttpError(409, "That handle is taken. Pick another.");
+    if (input.payoutAccount) {
+      if (!isTestnetAccountId(input.payoutAccount)) throw new HttpError(400, "Enter an existing NEAR testnet account, like yourname.testnet.");
+      let found = true;
+      if (deps.accountExists) {
+        try { found = await deps.accountExists(input.payoutAccount); } catch { throw new HttpError(502, "Could not reach NEAR testnet to check that account. Try again."); }
+      }
+      if (!found) throw new HttpError(400, `${input.payoutAccount} does not exist on NEAR testnet. Create it first, or use another account.`);
+    }
     const now = clock().toISOString();
     const existing = profiles.get(userId);
     const next: ResearcherProfile = { userId, ...input, links: input.links, createdAt: existing?.createdAt ?? now, updatedAt: now };
     profiles.save(next);
-    res.json({ profile: publicProfile(next) });
-  });
+    res.json({ profile: ownProfile(next) });
+  }));
 
   router.get("/reports", (req, res) => {
     const { userId } = caller(req);
@@ -248,13 +264,15 @@ export function createApiRouter(deps: ApiDeps): express.Router {
       messages: [],
       timeline: [],
     };
+    const payoutAccount = profiles.get(report.researcherId)?.payoutAccount;
+    if (payoutAccount) report.payoutAccount = payoutAccount;
     let sealTx = ledger.previewTxHash(report.id, "register");
     if (live) {
       const chain = needRelay();
       // The contract wants the disclosure date at least 7 days past the block time.
       const day = 86_400_000;
       const deadlineMs = Math.min(Math.max(new Date(report.disclosureDeadline).getTime(), now.getTime() + 7 * day + 3_600_000), now.getTime() + 364 * day);
-      const registered = await chain.call("researcher", "register_report", { report_id: report.id, content_hash: report.contentHash, disclosure_deadline_ns: BigInt(deadlineMs) * 1_000_000n }, NEAR_FEE);
+      const registered = await chain.call("researcher", "register_report", { report_id: report.id, content_hash: report.contentHash, disclosure_deadline_ns: BigInt(deadlineMs) * 1_000_000n, payout_account: payoutAccount ?? null }, NEAR_FEE);
       await chain.call("researcher", "set_team_account", { report_id: report.id, team: chain.teamAccountId });
       sealTx = registered.txHash;
     }
@@ -274,10 +292,10 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     if (report.invites.length >= 10) throw new HttpError(409, "Too many invites on this report.");
     const input = inviteBody.parse(req.body);
     const token = randomBytes(24).toString("base64url");
-    const invite = {
-      id: randomUUID(), token, channel: input.channel, handle: input.handle, status: "pending" as const,
+    const invite: InviteRecord = {
+      id: randomUUID(), token, channel: input.channel, handle: input.handle, status: "pending",
       createdAt: clock().toISOString(),
-      delivery: { state: "idle" as const },
+      delivery: { state: "idle" },
     };
     // Build the private invite URL in memory only. Never log it (may contain #k=).
     const keyFrag = input.reportKeyHex ? `#k=${input.reportKeyHex.toLowerCase()}` : "";
@@ -330,7 +348,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
   /** Register this browser's device public key so a party who holds the report key can escrow a wrap for you. */
   router.post("/reports/:id/device-key", (req, res) => {
     const { report, role } = party(req);
-    const user = (req as AuthedRequest).caller;
+    const user = (req as unknown as AuthedRequest).caller;
     const { devicePubHex } = deviceKeyBody.parse(req.body);
     const pub = devicePubHex.toLowerCase();
     report.deviceKeys = report.deviceKeys ?? [];
@@ -374,7 +392,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
   /** Fetch wraps for the signed-in user only. */
   router.get("/reports/:id/key-wraps/me", (req, res) => {
     const { report } = party(req);
-    const user = (req as AuthedRequest).caller;
+    const user = (req as unknown as AuthedRequest).caller;
     const wraps = (report.keyWraps ?? []).filter((w) => w.userId === user.userId).map((w) => ({ devicePubHex: w.devicePubHex, wrapHex: w.wrapHex, at: w.at }));
     res.json({ wraps });
   });
@@ -452,43 +470,43 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     router.post(`/reports/:id/${name}`, handler(async (req, res) => {
       const { report, role } = party(req);
       if (live) needRelay();
-      // Work on a copy so a failed transition leaves the stored record untouched.
-      const draft = structuredClone(report);
-      await run(draft, role, req);
-      store.save(draft);
-      res.json(view(draft, role));
+      // One chain action per report at a time, shared with the payout poller.
+      await exclusive(report.id, async () => {
+        // Work on a copy so a failed transition leaves the stored record untouched.
+        const draft = structuredClone(store.get(report.id) ?? report);
+        await run(draft, role, req);
+        store.save(draft);
+        res.json(view(draft, role));
+      });
     }));
 
-  /** In live mode: record the real transaction on the newest timeline entry and drop the preview wording. */
-  const stamp = (r: StoredReport, txHash: string) => {
-    const last = r.timeline[r.timeline.length - 1];
-    if (!last) return;
-    last.txHash = txHash;
-    if (last.detail) last.detail = last.detail.replace(/\s*\(preview ledger[^)]*\)/, "");
-  };
   const yocto = (near: number) => String(BigInt(Math.round(near * 1_000_000)) * 10n ** 18n);
   const termsHash = (r: StoredReport) => createHash("sha256").update(`${r.id}|${r.terms?.amountNear}|${r.terms?.repo}`).digest("hex");
-  const verdictOf = (logs: string[], phase: string): MergeAnswer["status"] => {
-    for (const line of logs) {
-      const m = /^EVENT_JSON:(.*)$/.exec(line);
-      if (!m) continue;
-      try {
-        const ev = JSON.parse(m[1]!) as { standard?: string; event?: string; data?: { phase?: string; verdict?: string } };
-        if (ev.standard === "redline" && ev.event === "merge_checked" && ev.data?.phase === phase) {
-          return ev.data.verdict === "Merged" ? "merged" : ev.data.verdict === "NotMerged" ? "not_merged" : "unknown";
-        }
-      } catch { /* not ours */ }
-    }
-    return "unknown";
-  };
-  const settled = (logs: string[], kind: string) => logs.some((l) => l.includes('"event":"transfer_settled"') && l.includes(`"kind":"${kind}"`));
 
   ledgerAction("terms", async (r, role, req) => {
     const input = termsBody.parse(req.body);
     ledger.proposeTerms(r, role, input.amountNear, input.repo, clock());
     if (live) stamp(r, (await needRelay().call("team", "propose_terms", { report_id: r.id, amount: yocto(input.amountNear), repo: input.repo, terms_hash: termsHash(r) })).txHash);
   });
+  /** Binds the researcher's profile payout account to the report, on chain in live mode. Only before funding. */
+  const bindPayout = async (r: StoredReport) => {
+    const account = profiles.get(r.researcherId)?.payoutAccount;
+    if (!account) throw new LedgerError("Set a payout NEAR account in your profile first, so the reward is paid to your own wallet.");
+    if (r.payoutAccount === account) return;
+    if (!["registered", "terms_proposed", "terms_accepted"].includes(r.status)) throw new LedgerError("the payout account is locked once the escrow is funded");
+    let txHash: string | undefined;
+    if (live) txHash = (await needRelay().call("researcher", "set_payout_account", { report_id: r.id, payout_account: account })).txHash;
+    r.payoutAccount = account;
+    log(r, { kind: "payout_account", title: "Payout account set", detail: `${account}${live ? "" : " (preview ledger)"}`, txHash });
+  };
+
+  ledgerAction("payout-account", async (r, role) => {
+    if (role !== "researcher") throw new LedgerError("only the researcher sets the payout account", 403);
+    await bindPayout(r);
+  });
+
   ledgerAction("terms/accept", async (r, role) => {
+    if (role === "researcher" && profiles.get(r.researcherId)?.payoutAccount) await bindPayout(r);
     ledger.acceptTerms(r, role, clock());
     if (live) stamp(r, (await needRelay().call("researcher", "accept_terms", { report_id: r.id, terms_hash: termsHash(r) })).txHash);
   });
@@ -497,35 +515,16 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     if (live) stamp(r, (await needRelay().call("team", "fund_escrow", { report_id: r.id }, BigInt(yocto(r.terms!.amountNear)))).txHash);
   });
   ledgerAction("pull-request", async (r, role, req) => {
+    if (live && !githubLoginOf(r.researcherId)) throw new LedgerError("Add your GitHub link to your profile first. The merged pull request must be authored by that account.");
     ledger.linkPullRequest(r, role, prBody.parse(req.body).url, clock());
     if (live) stamp(r, (await needRelay().call("researcher", "link_pull_request", { report_id: r.id, pull_request: r.escrow!.pullRequest })).txHash);
   });
 
-  ledgerAction("check-merge", async (r) => {
-    if (r.status !== "funded" || !r.escrow?.pullRequest || !r.escrow.repo) throw new LedgerError("link a pull request first");
-    if (!live) {
-      ledger.applyConfirmAnswer(r, await mergeLookup(r.escrow.repo, r.escrow.pullRequest, githubLoginOf(r.researcherId)), clock());
-      return;
-    }
-    // The enclave inside OutLayer looks at GitHub and the contract records its answer.
-    const done = await needRelay().call("team", "request_merge_check", { report_id: r.id }, NEAR_CHECK_DEPOSIT, 300);
-    const answer: MergeAnswer = { status: verdictOf(done.logs, "Confirm"), repo: r.escrow.repo, pullRequest: r.escrow.pullRequest };
-    if (answer.status === "merged") answer.mergeCommit = (await mergeLookup(r.escrow.repo, r.escrow.pullRequest, githubLoginOf(r.researcherId)).catch(() => undefined))?.mergeCommit;
-    ledger.applyConfirmAnswer(r, answer, clock());
-    if (answer.status === "merged") stamp(r, done.txHash);
-  });
+  ledgerAction("check-merge", async (r) => { await runMergeCheck(settlement, r); });
 
   ledgerAction("claim", async (r, role) => {
     if (role !== "researcher") throw new LedgerError("only the researcher can claim", 403);
-    if (r.status !== "merge_confirmed" || !r.escrow?.pullRequest || !r.escrow.repo) throw new LedgerError("the merge has not been confirmed yet");
-    if (!live) {
-      ledger.applyPayoutAnswer(r, role, await mergeLookup(r.escrow.repo, r.escrow.pullRequest, githubLoginOf(r.researcherId)), clock());
-      return;
-    }
-    const done = await needRelay().call("researcher", "claim_payout", { report_id: r.id }, NEAR_CHECK_DEPOSIT, 300);
-    const status = verdictOf(done.logs, "Payout");
-    if (status === "merged" && !settled(done.logs, "Payout")) throw new ChainError("The payout transfer did not settle. Try claiming again.", 502);
-    if (ledger.applyPayoutAnswer(r, role, { status }, clock())) stamp(r, done.txHash);
+    await runClaim(settlement, r);
   });
 
   ledgerAction("refund", async (r, role) => {

@@ -11,7 +11,7 @@ export interface TimelineEntry {
   at: string;
   kind:
     | "sealed" | "invite_sent" | "invite_redeemed" | "invite_revoked" | "message" | "agreement_signed" | "escrow_funded"
-    | "pr_linked" | "pr_merged" | "payout" | "refund" | "disclosure_notice" | "published" | "terms_proposed";
+    | "pr_linked" | "pr_merged" | "payout" | "refund" | "disclosure_notice" | "published" | "terms_proposed" | "payout_account";
   title: string;
   detail?: string;
   txHash?: string;
@@ -102,6 +102,8 @@ export interface StoredReport {
   /** Report key sealed to the enclave public key. Opaque to the server. */
   sealedKeyHex?: string;
   status: LedgerStatus;
+  /** NEAR account bound on chain to receive the reward. Required before the team can fund. */
+  payoutAccount?: string;
   terms?: TermsRecord;
   escrow?: EscrowRecord;
   invites: InviteRecord[];
