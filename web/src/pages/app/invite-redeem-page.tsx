@@ -48,7 +48,7 @@ export function InviteRedeemPage() {
             <ProfileAvatar size="lg" name={data.from} />
             <p className="text-subtitle"><span className="font-medium">{data.from}</span> invited you to a sealed report</p>
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col items-start gap-2">
             <Badge color={severityTone[data.severity]} className="capitalize">{data.severity}</Badge>
             <h1 className="text-title font-semibold leading-snug tracking-tight">{data.title}</h1>
           </div>

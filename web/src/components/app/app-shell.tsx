@@ -50,8 +50,8 @@ function UserBlock() {
     <div className="space-y-2">
       <div className="flex items-center gap-3 rounded-xl bg-surface-2 p-3">
         <UserCircle size={28} weight="duotone" className="shrink-0 text-muted-foreground" />
-        <div className="min-w-0">
-          <p className="truncate text-subtitle font-medium">{displayName}</p>
+        <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+          <p className="w-full truncate text-subtitle font-medium leading-tight">{displayName}</p>
           {demo && <Badge color="amber"><Flask size={11} /> Sample data</Badge>}
         </div>
       </div>

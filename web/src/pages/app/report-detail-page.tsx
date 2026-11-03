@@ -106,19 +106,23 @@ function ReportView({ initial, reload }: { initial: Report; reload: () => void }
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        <div className="min-w-0 space-y-4">
-          <Tabs selectedIndex={tab} onSelect={setTab} idPrefix="report-tabs">
-            <TabsItem index={0} label="Report" icon={FileText} />
-            <TabsItem index={1} label="Negotiation" icon={ChatsCircle} />
-            <TabsItem index={2} label="Timeline" icon={ListChecks} />
-          </Tabs>
-
-          {tab === 0 && (
-            <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
+        <div className="min-w-0 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 pb-1">
+            <Tabs selectedIndex={tab} onSelect={setTab} idPrefix="report-tabs">
+              <TabsItem index={0} label="Report" icon={FileText} />
+              <TabsItem index={1} label="Negotiation" icon={ChatsCircle} />
+              <TabsItem index={2} label="Timeline" icon={ListChecks} />
+            </Tabs>
+            {tab === 0 && (
+              <div className="flex items-center gap-2">
                 <Button variant="secondary" size="compact" leadingIcon={FileMd} disabled={!!report.bodyLocked} loading={exporting === "md"} onClick={() => doExport("md")}>Export .md</Button>
                 <Button variant="secondary" size="compact" leadingIcon={FilePdf} disabled={!!report.bodyLocked} loading={exporting === "pdf"} onClick={() => doExport("pdf")}>Export PDF</Button>
               </div>
+            )}
+          </div>
+
+          {tab === 0 && (
+            <div>
               {report.bodyLocked
                 ? <div className="flex items-center gap-2 rounded-2xl bg-surface-2 p-6 text-body text-muted-foreground"><Lock size={16} /> Encrypted. Add the report key to read it.</div>
                 : <ReportEditor value={report.body} editable={false} />}

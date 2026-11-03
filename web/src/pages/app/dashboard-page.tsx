@@ -39,20 +39,23 @@ export function DashboardPage() {
         <Stat icon={Coins} label="Held in escrow" loading={loading} value={formatNear(escrowed)} />
       </div>
 
-      <Tabs selectedIndex={tab} onSelect={setTab} idPrefix="report-filter">
-        {filters.map((f, i) => <TabsItem key={f.label} index={i} label={f.label} icon={f.icon} />)}
-      </Tabs>
-
-      {error ? (
-        <ErrorState message={error.message} onRetry={reload} />
-      ) : loading ? (
-        <div className="grid gap-4 md:grid-cols-2" aria-busy="true">{[0, 1, 2, 3].map((i) => <ReportCardSkeleton key={i} />)}</div>
-      ) : visible.length === 0 ? (
-        <EmptyState icon={Tray} title="Nothing here yet" description="File your first sealed report, or wait for an invite from a security team."
-          action={<Button render={<Link to="/app/reports/new" />} leadingIcon={FilePlus}>New report</Button>} />
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">{visible.map((r, i) => <ReportCard key={r.id} report={r} index={i} />)}</div>
-      )}
+      <section className="space-y-5">
+        <div className="py-1">
+          <Tabs selectedIndex={tab} onSelect={setTab} idPrefix="report-filter">
+            {filters.map((f, i) => <TabsItem key={f.label} index={i} label={f.label} icon={f.icon} />)}
+          </Tabs>
+        </div>
+        {error ? (
+          <ErrorState message={error.message} onRetry={reload} />
+        ) : loading ? (
+          <div className="grid gap-4 md:grid-cols-2" aria-busy="true">{[0, 1, 2, 3].map((i) => <ReportCardSkeleton key={i} />)}</div>
+        ) : visible.length === 0 ? (
+          <EmptyState icon={Tray} title="Nothing here yet" description="File your first sealed report, or wait for an invite from a security team."
+            action={<Button render={<Link to="/app/reports/new" />} leadingIcon={FilePlus}>New report</Button>} />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">{visible.map((r, i) => <ReportCard key={r.id} report={r} index={i} />)}</div>
+        )}
+      </section>
     </div>
   );
 }

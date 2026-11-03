@@ -54,7 +54,7 @@ export function EscrowPanel({ report, onChange }: { report: Report; onChange: (n
   return (
     <Panel preview={escrow?.mode === "preview" || !escrow}>
       {escrow || report.terms ? (
-        <div className="flex items-end justify-between">
+        <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
           <div>
             <p className="text-caption text-muted-foreground">Reward</p>
             <p className="text-[1.75rem] font-semibold leading-none tracking-tight tabular-nums">{formatNear(escrow?.amountNear ?? report.terms?.amountNear)}</p>
@@ -169,8 +169,8 @@ function Panel({ children, preview }: { children: React.ReactNode; preview: bool
 function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <dt className="flex items-center gap-2 text-muted-foreground">{icon}{label}</dt>
-      <dd className="min-w-0 truncate text-right">{value}</dd>
+      <dt className="flex shrink-0 items-center gap-2 text-muted-foreground">{icon}{label}</dt>
+      <dd className="min-w-0 break-all text-right">{value}</dd>
     </div>
   );
 }

@@ -84,31 +84,40 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
       {invites.length === 0 ? (
         <p className="text-body text-muted-foreground">Nobody has been invited yet. Invite the security contact of the affected project.</p>
       ) : (
-        <ul className="space-y-1">
+        <ul className="space-y-1.5">
           {invites.map((invite) => {
             const meta = channelMeta[invite.channel];
+            const status: string = invite.status;
+            const showCopy = status === "pending" && !!invite.token;
+            const showWithdraw = canInvite && status !== "revoked";
             return (
-              <li key={invite.id} className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-hover">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.06]"><meta.icon size={16} /></span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-subtitle font-medium">{invite.handle}</p>
-                  <p className="text-caption text-muted-foreground">{meta.label}</p>
+              <li key={invite.id} className="space-y-2 rounded-xl px-2 py-2.5 transition-colors hover:bg-hover">
+                <div className="flex items-start gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.06]"><meta.icon size={16} /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="break-all text-subtitle font-medium leading-snug">{invite.handle}</p>
+                    <p className="text-caption text-muted-foreground">{meta.label}</p>
+                  </div>
+                  <Badge color={statusColor[invite.status]} className="mt-0.5 capitalize">{invite.status}</Badge>
                 </div>
-                {invite.status === "pending" && invite.token && (
-                  <Button variant="secondary" size="compact" leadingIcon={copied === invite.id ? Check : LinkSimple} onClick={() => void copy(invite)}>
-                    {copied === invite.id ? "Copied" : "Copy link"}
-                  </Button>
+                {(showCopy || showWithdraw) && (
+                  <div className="flex flex-wrap items-center gap-2 pl-11">
+                    {showCopy && (
+                      <Button variant="secondary" size="compact" leadingIcon={copied === invite.id ? Check : LinkSimple} onClick={() => void copy(invite)}>
+                        {copied === invite.id ? "Copied" : "Copy link"}
+                      </Button>
+                    )}
+                    {showWithdraw && (
+                      <Button
+                        variant={confirming === invite.id ? "primary" : "ghost"} size="compact" leadingIcon={UserMinus}
+                        loading={withdrawing === invite.id} onClick={() => void withdraw(invite)}
+                        aria-label={`Withdraw access for ${invite.handle}`}
+                      >
+                        {confirming === invite.id ? "Confirm" : "Withdraw"}
+                      </Button>
+                    )}
+                  </div>
                 )}
-                {canInvite && invite.status !== "revoked" && (
-                  <Button
-                    variant={confirming === invite.id ? "primary" : "ghost"} size="compact" leadingIcon={UserMinus}
-                    loading={withdrawing === invite.id} onClick={() => void withdraw(invite)}
-                    aria-label={`Withdraw access for ${invite.handle}`}
-                  >
-                    {confirming === invite.id ? "Confirm" : "Withdraw"}
-                  </Button>
-                )}
-                <Badge color={statusColor[invite.status]} className="capitalize">{invite.status}</Badge>
               </li>
             );
           })}

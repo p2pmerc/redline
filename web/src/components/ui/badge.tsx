@@ -42,7 +42,7 @@ const badgeColors = {
 type BadgeColor = keyof typeof badgeColors;
 
 const badgeVariants = cva(
-  "inline-flex shrink-0 flex-row flex-nowrap items-center whitespace-nowrap",
+  "inline-flex shrink-0 flex-row flex-nowrap items-center gap-1 whitespace-nowrap align-middle [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -53,7 +53,7 @@ const badgeVariants = cva(
       // default, 20px compact. The height is fixed rather than padded so the
       // trimmed label below can't shrink the badge.
       size: {
-        default: "h-6 px-2.5 text-[length:var(--fs-caption,12px)] leading-[var(--lh-caption,16px)] gap-1.5",
+        default: "h-6 px-2.5 text-[length:var(--fs-caption,12px)] leading-[var(--lh-caption,16px)] gap-1",
         compact: "h-5 px-2 text-[length:var(--fs-caption-compact,11px)] leading-[var(--lh-caption-compact,14px)] gap-1",
       },
     },
@@ -151,7 +151,7 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
         {/* text-box needs a block container. The badge root is a flex
             container, so the label gets its own span. Height is fixed (h-*),
             so trimming only recenters the letterforms. */}
-        <span className="inline-flex flex-row flex-nowrap items-center gap-1 whitespace-nowrap leading-none">{children}</span>
+        <span className="inline-flex flex-row flex-nowrap items-center gap-1 whitespace-nowrap leading-none [&_svg]:shrink-0">{children}</span>
       </span>
     );
   }
