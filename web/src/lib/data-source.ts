@@ -166,7 +166,28 @@ const post = async (id: string, path: string, body: unknown = {}) => {
   return toReport(await api<PartyView>(`/reports/${encodeURIComponent(id)}/${path}`, { body }));
 };
 
-export const createInvite = (id: string, channel: InviteRecipient["channel"], handle: string) => post(id, "invites", { channel, handle });
+export const createInvite = (id: string, channel: InviteRecipient["channel"], handle: string, reportKeyHex?: string | null) =>
+  post(id, "invites", { channel, handle, ...(reportKeyHex ? { reportKeyHex } : {}) });
+
+export async function registerDeviceKey(reportId: string, devicePubHex: string): Promise<void> {
+  guard();
+  await api(`/reports/${encodeURIComponent(reportId)}/device-key`, { body: { devicePubHex } });
+}
+
+export async function listPartyDeviceKeys(reportId: string): Promise<{ keys: { userId: string; devicePubHex: string; at: string }[] }> {
+  guard();
+  return api(`/reports/${encodeURIComponent(reportId)}/device-keys`);
+}
+
+export async function depositKeyWraps(reportId: string, wraps: { userId: string; devicePubHex: string; wrapHex: string }[]): Promise<void> {
+  guard();
+  await api(`/reports/${encodeURIComponent(reportId)}/key-wraps`, { body: { wraps } });
+}
+
+export async function fetchMyKeyWraps(reportId: string): Promise<{ wraps: { devicePubHex: string; wrapHex: string; at: string }[] }> {
+  guard();
+  return api(`/reports/${encodeURIComponent(reportId)}/key-wraps/me`);
+}
 export const revokeInvite = (id: string, inviteId: string) => post(id, `invites/${encodeURIComponent(inviteId)}/revoke`);
 export const proposeTerms = (id: string, amountNear: number, repo: string) => post(id, "terms", { amountNear, repo });
 export const acceptTerms = (id: string) => post(id, "terms/accept");

@@ -12,6 +12,7 @@ import { LedgerError, type MergeAnswer } from "./escrow-ledger.js";
 import { isPublic, partyView, publicView, roleOf, summaryView, type PublicAuthor } from "./report-views.js";
 import { openCiphertext } from "./report-ciphertext.js";
 import { ChainError, type ChainRelay } from "./chain-relay.js";
+import { sendInviteEmail } from "./invite-email.js";
 
 export interface ApiDeps {
   config: ServerConfig;
@@ -48,7 +49,12 @@ const profileBody = z.object({
 const createReportBody = z.object({
   title: z.string().trim().min(4).max(140),
   target: z.string().trim().max(100).default(""),
-  repo: z.string().trim().regex(ledger.REPO_PATTERN).optional().or(z.literal("").transform(() => undefined)),
+  repo: z.string().trim().optional().or(z.literal("").transform(() => undefined)).transform((v, ctx) => {
+    if (v == null || v === "") return undefined;
+    const normalized = ledger.normalizeRepoRef(v);
+    if (!normalized) { ctx.addIssue({ code: "custom", message: "Use owner/name or a github.com/owner/name URL" }); return z.NEVER; }
+    return normalized;
+  }),
   severity: z.enum(["critical", "high", "medium", "low"]),
   summary: z.string().trim().max(400).default(""),
   disclosureDays: z.number().int().min(7).max(180),
@@ -56,9 +62,29 @@ const createReportBody = z.object({
   contentHash: hash64,
   sealedKeyHex: hex(4000).optional(),
 });
-const inviteBody = z.object({ channel: z.enum(["email", "x", "telegram", "github"]), handle: z.string().trim().min(2).max(120) });
+const inviteBody = z.object({
+  channel: z.enum(["email", "x", "telegram", "github"]),
+  handle: z.string().trim().min(2).max(120),
+  /** Browser-only report key. Used once to build the #k= invite URL for email; never stored or logged. */
+  reportKeyHex: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
+});
+const deviceKeyBody = z.object({ devicePubHex: z.string().regex(/^[0-9a-fA-F]{130}$/) });
+const keyWrapsBody = z.object({
+  wraps: z.array(z.object({
+    userId: z.string().min(3).max(128),
+    devicePubHex: z.string().regex(/^[0-9a-fA-F]{130}$/),
+    wrapHex: z.string().regex(/^[0-9a-fA-F]+$/i).min(100).max(4000),
+  })).min(1).max(20),
+});
 const messageBody = z.object({ ciphertextHex: hex(40_000), hash: hash64 });
-const termsBody = z.object({ amountNear: z.number().positive().max(1_000_000), repo: z.string().trim().regex(ledger.REPO_PATTERN) });
+const termsBody = z.object({
+  amountNear: z.number().positive().max(1_000_000),
+  repo: z.string().trim().transform((v, ctx) => {
+    const normalized = ledger.normalizeRepoRef(v);
+    if (!normalized) { ctx.addIssue({ code: "custom", message: "Use owner/name or a github.com/owner/name URL" }); return z.NEVER; }
+    return normalized;
+  }),
+});
 const prBody = z.object({ url: z.string().trim().max(200) });
 const publishBody = z.object({ body: z.string().min(1).max(500_000), keyHex: hex(64) });
 
@@ -81,6 +107,15 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     return relay;
   };
   const profiles = deps.profiles ?? new ProfileStore(null);
+  const githubLoginOf = (userId: string): string | undefined => {
+    const link = profiles.get(userId)?.links.github;
+    if (!link) return undefined;
+    try {
+      const u = new URL(link);
+      const part = u.pathname.split("/").filter(Boolean)[0];
+      return part ? part.replace(/^@/, "").toLowerCase() : undefined;
+    } catch { return undefined; }
+  };
   const authorOf = (userId: string): PublicAuthor | undefined => {
     const p = profiles.get(userId);
     return p ? { handle: p.handle, displayName: p.displayName, avatarSeed: p.avatarSeed } : undefined;
@@ -233,15 +268,115 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     res.json(view(report, role));
   });
 
-  router.post("/reports/:id/invites", (req, res) => {
+  router.post("/reports/:id/invites", handler(async (req, res) => {
     const { report, role } = party(req);
     if (role !== "researcher") throw new HttpError(403, "Only the researcher can invite people.");
     if (report.invites.length >= 10) throw new HttpError(409, "Too many invites on this report.");
     const input = inviteBody.parse(req.body);
-    report.invites.push({ id: randomUUID(), token: randomBytes(24).toString("base64url"), channel: input.channel, handle: input.handle, status: "pending", createdAt: clock().toISOString() });
+    const token = randomBytes(24).toString("base64url");
+    const invite = {
+      id: randomUUID(), token, channel: input.channel, handle: input.handle, status: "pending" as const,
+      createdAt: clock().toISOString(),
+      delivery: { state: "idle" as const },
+    };
+    // Build the private invite URL in memory only. Never log it (may contain #k=).
+    const keyFrag = input.reportKeyHex ? `#k=${input.reportKeyHex.toLowerCase()}` : "";
+    const inviteUrl = `${config.appOrigin}/app/invite/${token}${keyFrag}`;
+
+    if (input.channel === "email") {
+      if (!config.agentMailApiKey || !config.agentMailInboxId) {
+        invite.delivery = { state: "failed", at: clock().toISOString(), error: "Email sending is not configured on this server yet." };
+      } else {
+        invite.delivery = { state: "sending", at: clock().toISOString() };
+        report.invites.push(invite);
+        log(report, { kind: "invite_sent", title: "Invite created", detail: `${input.channel}: ${input.handle}` });
+        store.save(report);
+        try {
+          const profile = profiles.get(report.researcherId);
+          const sent = await sendInviteEmail(
+            { apiKey: config.agentMailApiKey, inboxId: config.agentMailInboxId },
+            {
+              to: input.handle,
+              inviteUrl,
+              researcherName: profile?.displayName || report.researcherName,
+              researcherHandle: profile?.handle,
+              repo: report.repo,
+              severity: report.severity,
+              title: report.title,
+              summary: report.summary || undefined,
+              disclosureDeadline: report.disclosureDeadline,
+              appOrigin: config.appOrigin,
+            },
+          );
+          invite.delivery = { state: "sent", at: clock().toISOString(), messageId: sent.messageId };
+          store.save(report);
+        } catch (e) {
+          invite.delivery = { state: "failed", at: clock().toISOString(), error: e instanceof Error ? e.message.slice(0, 200) : "Send failed" };
+          store.save(report);
+        }
+        return void res.status(201).json(view(report, role));
+      }
+    } else if (input.channel === "x" || input.channel === "telegram") {
+      // Client opens a one-click DM with the invite URL; we mark ready (URL returned via token only to researcher).
+      invite.delivery = { state: "ready", at: clock().toISOString() };
+    }
+
+    report.invites.push(invite);
     log(report, { kind: "invite_sent", title: "Invite created", detail: `${input.channel}: ${input.handle}` });
     store.save(report);
     res.status(201).json(view(report, role));
+  }));
+
+  /** Register this browser's device public key so a party who holds the report key can escrow a wrap for you. */
+  router.post("/reports/:id/device-key", (req, res) => {
+    const { report, role } = party(req);
+    const user = (req as AuthedRequest).caller;
+    const { devicePubHex } = deviceKeyBody.parse(req.body);
+    const pub = devicePubHex.toLowerCase();
+    report.deviceKeys = report.deviceKeys ?? [];
+    report.deviceKeys = report.deviceKeys.filter((d) => !(d.userId === user.userId && d.devicePubHex === pub));
+    report.deviceKeys.push({ userId: user.userId, devicePubHex: pub, at: clock().toISOString() });
+    // Keep the list small.
+    if (report.deviceKeys.length > 40) report.deviceKeys = report.deviceKeys.slice(-40);
+    report.updatedAt = clock().toISOString();
+    store.save(report);
+    res.json({ ok: true, devicePubHex: pub, role });
+  });
+
+  /** List device pubs for parties on this report (researcher + redeemed team), so a browser holding the key can wrap it. */
+  router.get("/reports/:id/device-keys", (req, res) => {
+    const { report } = party(req);
+    const partyIds = new Set([report.researcherId, ...(report.teamId ? [report.teamId] : [])]);
+    const keys = (report.deviceKeys ?? []).filter((d) => partyIds.has(d.userId));
+    res.json({ keys });
+  });
+
+  /** Deposit ciphertext-only wraps. Caller must already hold the report key in their browser (enforced client-side). */
+  router.post("/reports/:id/key-wraps", (req, res) => {
+    const { report, role } = party(req);
+    if (role !== "researcher" && role !== "team") throw new HttpError(403, "Only parties to the report can deposit wraps.");
+    const input = keyWrapsBody.parse(req.body);
+    const partyIds = new Set([report.researcherId, ...(report.teamId ? [report.teamId] : [])]);
+    report.keyWraps = report.keyWraps ?? [];
+    for (const w of input.wraps) {
+      if (!partyIds.has(w.userId)) throw new HttpError(400, "Wraps are only for the researcher or the redeemed security contact.");
+      const pub = w.devicePubHex.toLowerCase();
+      const wrapHex = w.wrapHex.toLowerCase();
+      report.keyWraps = report.keyWraps.filter((x) => !(x.userId === w.userId && x.devicePubHex === pub));
+      report.keyWraps.push({ userId: w.userId, devicePubHex: pub, wrapHex, at: clock().toISOString() });
+    }
+    if (report.keyWraps.length > 60) report.keyWraps = report.keyWraps.slice(-60);
+    report.updatedAt = clock().toISOString();
+    store.save(report);
+    res.json({ ok: true, count: input.wraps.length });
+  });
+
+  /** Fetch wraps for the signed-in user only. */
+  router.get("/reports/:id/key-wraps/me", (req, res) => {
+    const { report } = party(req);
+    const user = (req as AuthedRequest).caller;
+    const wraps = (report.keyWraps ?? []).filter((w) => w.userId === user.userId).map((w) => ({ devicePubHex: w.devicePubHex, wrapHex: w.wrapHex, at: w.at }));
+    res.json({ wraps });
   });
 
   // Revoking closes the door at once: a redeemed member stops being a party, so every read of the
@@ -369,13 +504,13 @@ export function createApiRouter(deps: ApiDeps): express.Router {
   ledgerAction("check-merge", async (r) => {
     if (r.status !== "funded" || !r.escrow?.pullRequest || !r.escrow.repo) throw new LedgerError("link a pull request first");
     if (!live) {
-      ledger.applyConfirmAnswer(r, await mergeLookup(r.escrow.repo, r.escrow.pullRequest), clock());
+      ledger.applyConfirmAnswer(r, await mergeLookup(r.escrow.repo, r.escrow.pullRequest, githubLoginOf(r.researcherId)), clock());
       return;
     }
     // The enclave inside OutLayer looks at GitHub and the contract records its answer.
     const done = await needRelay().call("team", "request_merge_check", { report_id: r.id }, NEAR_CHECK_DEPOSIT, 300);
     const answer: MergeAnswer = { status: verdictOf(done.logs, "Confirm"), repo: r.escrow.repo, pullRequest: r.escrow.pullRequest };
-    if (answer.status === "merged") answer.mergeCommit = (await mergeLookup(r.escrow.repo, r.escrow.pullRequest).catch(() => undefined))?.mergeCommit;
+    if (answer.status === "merged") answer.mergeCommit = (await mergeLookup(r.escrow.repo, r.escrow.pullRequest, githubLoginOf(r.researcherId)).catch(() => undefined))?.mergeCommit;
     ledger.applyConfirmAnswer(r, answer, clock());
     if (answer.status === "merged") stamp(r, done.txHash);
   });
@@ -384,7 +519,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     if (role !== "researcher") throw new LedgerError("only the researcher can claim", 403);
     if (r.status !== "merge_confirmed" || !r.escrow?.pullRequest || !r.escrow.repo) throw new LedgerError("the merge has not been confirmed yet");
     if (!live) {
-      ledger.applyPayoutAnswer(r, role, await mergeLookup(r.escrow.repo, r.escrow.pullRequest), clock());
+      ledger.applyPayoutAnswer(r, role, await mergeLookup(r.escrow.repo, r.escrow.pullRequest, githubLoginOf(r.researcherId)), clock());
       return;
     }
     const done = await needRelay().call("researcher", "claim_payout", { report_id: r.id }, NEAR_CHECK_DEPOSIT, 300);
@@ -398,7 +533,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     if (!ledger.canRefund(r, clock())) throw new LedgerError("the escrow has not expired, or there is nothing to refund");
     const e = r.escrow!;
     if (!live) {
-      const answer: ledger.MergeAnswer = e.pullRequest && e.repo ? await mergeLookup(e.repo, e.pullRequest) : { status: "not_merged" };
+      const answer: ledger.MergeAnswer = e.pullRequest && e.repo ? await mergeLookup(e.repo, e.pullRequest, githubLoginOf(r.researcherId)) : { status: "not_merged" };
       ledger.applyRefundAnswer(r, role, answer, clock());
       return;
     }

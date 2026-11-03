@@ -62,3 +62,63 @@ export function sealKeyToEnclave(keyHex: string, contentHash: string, enclavePub
   const envelope = JSON.stringify({ v: 1, key: keyHex, content_hash: contentHash });
   return toHex(eciesEncrypt(enclavePublicKeyHex, encoder.encode(envelope)));
 }
+
+/** Long-lived per-browser keypair so a report key can be escrowed as ciphertext the server cannot open. */
+const DEVICE_PRIV = "redline:device-priv";
+const DEVICE_PUB = "redline:device-pub";
+
+export async function ensureDeviceKeypair(): Promise<{ publicKeyHex: string }> {
+  const existing = localStorage.getItem(DEVICE_PUB);
+  if (existing && localStorage.getItem(DEVICE_PRIV)) return { publicKeyHex: existing };
+  const pair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const pub = await crypto.subtle.exportKey("raw", pair.publicKey);
+  const priv = await crypto.subtle.exportKey("pkcs8", pair.privateKey);
+  const publicKeyHex = toHex(new Uint8Array(pub));
+  localStorage.setItem(DEVICE_PUB, publicKeyHex);
+  localStorage.setItem(DEVICE_PRIV, toHex(new Uint8Array(priv)));
+  return { publicKeyHex };
+}
+
+export function getDevicePublicKeyHex(): string | null {
+  try { return localStorage.getItem(DEVICE_PUB); } catch { return null; }
+}
+
+async function importDeviceKeys() {
+  const pubHex = localStorage.getItem(DEVICE_PUB);
+  const privHex = localStorage.getItem(DEVICE_PRIV);
+  if (!pubHex || !privHex) throw new Error("This browser has no device key yet.");
+  const publicKey = await crypto.subtle.importKey("raw", fromHex(pubHex) as BufferSource, { name: "ECDH", namedCurve: "P-256" }, true, []);
+  const privateKey = await crypto.subtle.importKey("pkcs8", fromHex(privHex) as BufferSource, { name: "ECDH", namedCurve: "P-256" }, false, ["deriveBits"]);
+  return { publicKey, privateKey };
+}
+
+/** Seal a report key to another browser's device public key (raw P-256, hex). Server stores only the ciphertext. */
+export async function wrapReportKeyForDevice(reportKeyHex: string, recipientPublicKeyHex: string): Promise<string> {
+  const recipient = await crypto.subtle.importKey("raw", fromHex(recipientPublicKeyHex) as BufferSource, { name: "ECDH", namedCurve: "P-256" }, true, []);
+  const ephemeral = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const shared = await crypto.subtle.deriveBits({ name: "ECDH", public: recipient }, ephemeral.privateKey, 256);
+  const wrapKey = await crypto.subtle.importKey("raw", shared, "AES-GCM", false, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, wrapKey, fromHex(reportKeyHex) as BufferSource));
+  const ephPub = new Uint8Array(await crypto.subtle.exportKey("raw", ephemeral.publicKey));
+  const packed = new Uint8Array(ephPub.length + iv.length + cipher.length);
+  packed.set(ephPub, 0);
+  packed.set(iv, ephPub.length);
+  packed.set(cipher, ephPub.length + iv.length);
+  return toHex(packed);
+}
+
+/** Open a wrap produced by wrapReportKeyForDevice, using this browser's device private key. */
+export async function unwrapReportKeyForDevice(wrapHex: string): Promise<string> {
+  const { privateKey } = await importDeviceKeys();
+  const packed = fromHex(wrapHex);
+  if (packed.length < 65 + 12 + 16) throw new Error("That wrap is the wrong length.");
+  const ephPub = packed.slice(0, 65);
+  const iv = packed.slice(65, 77);
+  const cipher = packed.slice(77);
+  const ephemeral = await crypto.subtle.importKey("raw", ephPub as BufferSource, { name: "ECDH", namedCurve: "P-256" }, true, []);
+  const shared = await crypto.subtle.deriveBits({ name: "ECDH", public: ephemeral }, privateKey, 256);
+  const wrapKey = await crypto.subtle.importKey("raw", shared, "AES-GCM", false, ["decrypt"]);
+  const plain = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, wrapKey, cipher as BufferSource));
+  return toHex(plain);
+}
