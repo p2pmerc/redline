@@ -7,10 +7,11 @@ const BASE = (process.env.BASE_URL ?? "http://localhost:5173").replace(/\/$/, ""
 const DISCLOSURE = process.env.DISCLOSURE_ID ?? "rl-6f0812c1a1a5";
 const RESEARCHER = process.env.RESEARCHER ?? "p2pmerch";
 
-const START_PAGES = ["/", "/disclosures", `/disclosures/${DISCLOSURE}`, "/leaderboard", `/researchers/${RESEARCHER}`, "/no-such-page"];
+const START_PAGES = process.env.NAV_START ? process.env.NAV_START.split(",") : ["/", "/disclosures", `/disclosures/${DISCLOSURE}`, "/leaderboard", `/researchers/${RESEARCHER}`, "/no-such-page"];
 const SECTIONS = [["How it works", "how-it-works"], ["Pipeline", "pipeline"], ["Security", "security"], ["FAQ", "faq"]];
 const PAGES = [["Disclosures", "/disclosures", "Public disclosures"], ["Leaderboard", "/leaderboard", "Researcher leaderboard"]];
-const VIEWPORTS = { desktop: { width: 1280, height: 800 }, mobile: { width: 390, height: 800 } };
+const ALL_VIEWPORTS = { desktop: { width: 1280, height: 800 }, mobile: { width: 390, height: 800 } };
+const VIEWPORTS = Object.fromEntries(Object.entries(ALL_VIEWPORTS).filter(([k]) => !process.env.NAV_VIEWPORT || process.env.NAV_VIEWPORT === k));
 
 let failures = 0;
 let checks = 0;
