@@ -9,6 +9,7 @@ import { createPrivyVerifier } from "./privy-token-verifier.js";
 import { ReportStore } from "./report-store.js";
 import { ProfileStore } from "./profile-store.js";
 import { relayFromEnv } from "./chain-relay.js";
+import { combineVerifiers, createKeyChecker, createWalletAuth } from "./wallet-auth.js";
 import { createAccountChecker } from "./near-account.js";
 import { createPayoutAutomation } from "./payout-automation.js";
 import { loadConfig, type ServerConfig } from "./server-config.js";
@@ -36,7 +37,8 @@ export function startServer(config: ServerConfig = loadConfig()) {
   const profiles = new ProfileStore(config.dataFile ? path.join(path.dirname(config.dataFile), "profiles.json") : null);
   const mergeLookup = createMergeLookup(undefined, config.githubToken);
   const relay = config.ledgerMode === "testnet" ? relayFromEnv(process.env, config.escrowContractId) : undefined;
-  const app = createApp({ config, store, profiles, verifyToken: createPrivyVerifier(config.privyAppId), mergeLookup, relay, accountExists: createAccountChecker(process.env.NEAR_RPC_URL || undefined) });
+  const walletAuth = createWalletAuth({ secret: process.env.SESSION_SECRET, keyBelongs: createKeyChecker(process.env.NEAR_RPC_URL || undefined) });
+  const app = createApp({ config, store, profiles, walletAuth, verifyToken: combineVerifiers(walletAuth, createPrivyVerifier(config.privyAppId)), mergeLookup, relay, accountExists: createAccountChecker(process.env.NEAR_RPC_URL || undefined) });
   const githubLoginOf = (userId: string): string | undefined => githubLoginFromLink(profiles.get(userId)?.links.github);
   if (config.ledgerMode === "testnet" && relay && process.env.PAYOUT_AUTOMATION !== "off") {
     const pollMs = Number(process.env.PAYOUT_POLL_MS) || (config.githubToken ? 65_000 : 300_000);

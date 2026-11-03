@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
+import type { WalletAuth } from "./wallet-auth.js";
 import { cleanName, type Caller, type TokenVerifier } from "./privy-token-verifier.js";
 import type { ReportStore } from "./report-store.js";
 import { ProfileStore, type ResearcherProfile } from "./profile-store.js";
@@ -26,6 +27,8 @@ export interface ApiDeps {
   relay?: ChainRelay;
   /** Looks up a testnet account. Defaults to accepting well-formed ids when not given. */
   accountExists?: AccountChecker;
+  /** NEAR wallet sign-in (HOT Wallet and other NEP-413 wallets). */
+  walletAuth?: WalletAuth;
   now?: () => Date;
 }
 
@@ -200,6 +203,15 @@ export function createApiRouter(deps: ApiDeps): express.Router {
   });
 
   // ------------------------------------------------------------------ authenticated
+  router.post("/auth/wallet", handler(async (req, res) => {
+    if (!deps.walletAuth) throw new HttpError(503, "Wallet sign-in is not available on this server.");
+    try {
+      res.json(await deps.walletAuth.login(req.body?.signed));
+    } catch (e) {
+      throw new HttpError(401, e instanceof Error ? e.message : "Wallet sign-in failed.");
+    }
+  }));
+
   router.use(requireAuth);
 
   const ownProfile = (p: ResearcherProfile) => ({ ...publicProfile(p), payoutAccount: p.payoutAccount });
@@ -217,7 +229,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     if (input.payoutAccount) {
       if (!isTestnetAccountId(input.payoutAccount)) throw new HttpError(400, "Enter an existing NEAR testnet account, like yourname.testnet.");
       let found = true;
-      if (deps.accountExists) {
+      if (deps.accountExists && !/^[0-9a-f]{64}$/.test(input.payoutAccount)) {
         try { found = await deps.accountExists(input.payoutAccount); } catch { throw new HttpError(502, "Could not reach NEAR testnet to check that account. Try again."); }
       }
       if (!found) throw new HttpError(400, `${input.payoutAccount} does not exist on NEAR testnet. Create it first, or use another account.`);

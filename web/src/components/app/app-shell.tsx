@@ -1,3 +1,4 @@
+import { AccountChip } from "@/components/ui/account-chip";
 import { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
@@ -72,7 +73,7 @@ function NavItems({ onNavigate, openCount }: { onNavigate?: () => void; openCoun
 }
 
 function UserBlock() {
-  const { displayName, signOut } = useSession();
+  const { displayName, signOut, account } = useSession();
   const { profile } = useProfile();
   const [pending, setPending] = useState(false);
   return (
@@ -82,6 +83,7 @@ function UserBlock() {
         <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
           <p className="w-full truncate text-subtitle font-medium leading-tight">{profile?.displayName ?? displayName}</p>
           {profile && <Link to={`/researchers/${profile.handle}`} className="w-full truncate text-caption text-muted-foreground hover:text-foreground">@{profile.handle}</Link>}
+          {account && <AccountChip account={account} className="w-full" />}
         </div>
       </div>
       <Button variant="ghost" className="w-full justify-start" leadingIcon={SignOut} loading={pending}

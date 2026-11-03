@@ -1,3 +1,5 @@
+import { AccountChip } from "@/components/ui/account-chip";
+import { useSession } from "@/lib/auth-context";
 import { useState } from "react";
 import { ArrowsClockwise, At, Code, GithubLogo, Globe, IdentificationBadge, XLogo, WarningCircle, FloppyDisk, Wallet } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,7 @@ interface Props {
 
 /** Create or edit a researcher profile. Used by onboarding and Settings. */
 export function ProfileForm({ initial, suggestedName, submitLabel, onSaved }: Props) {
+  const { account, accountSource } = useSession();
   const startName = initial?.displayName ?? (suggestedName && !suggestedName.includes("@") ? suggestedName : "");
   const [displayName, setDisplayName] = useState(startName);
   const [handle, setHandle] = useState(initial?.handle ?? suggestHandle(startName));
@@ -36,7 +39,7 @@ export function ProfileForm({ initial, suggestedName, submitLabel, onSaved }: Pr
   const [github, setGithub] = useState(initial?.links.github ?? "");
   const [x, setX] = useState(initial?.links.x ?? "");
   const [website, setWebsite] = useState(initial?.links.website ?? "");
-  const [payout, setPayout] = useState(initial?.payoutAccount ?? "");
+  const [payout, setPayout] = useState(initial?.payoutAccount ?? account ?? "");
   const [seed, setSeed] = useState(initial?.avatarSeed ?? randomSeed());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +117,13 @@ export function ProfileForm({ initial, suggestedName, submitLabel, onSaved }: Pr
         <InputGroup>
           <InputField index={6} label="Payout NEAR account" icon={Wallet} placeholder="yourname.testnet" value={payout} onChange={setPayout} error={payout ? problems.payout : undefined} disabled={saving} />
         </InputGroup>
-        <p className="text-caption text-muted-foreground">Bounties are paid straight to this wallet, and it is checked against NEAR testnet when you save. It is bound on chain to each report before the team can fund it, and only you and the team on your reports can see it.</p>
+        {account && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
+            <AccountChip account={account} label={accountSource === "hot" ? "Your wallet" : "Your Redline wallet"} />
+            {payout.trim().toLowerCase() !== account && <button type="button" className="text-foreground underline underline-offset-2" onClick={() => setPayout(account)}>Use this for payouts</button>}
+          </div>
+        )}
+        <p className="text-caption text-muted-foreground">{account ? "Payouts default to your own account above. Replace it with any NEAR testnet account if you prefer. " : ""}Bounties are paid straight to this wallet, and it is checked against NEAR testnet when you save. It is bound on chain to each report before the team can fund it, and only you and the team on your reports can see it.</p>
       </div>
 
       {error && (
