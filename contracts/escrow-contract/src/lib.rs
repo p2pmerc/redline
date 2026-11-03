@@ -38,6 +38,16 @@ const SETTLE_CALLBACK_GAS: Gas = Gas::from_tgas(10);
 pub struct EscrowContract {
     config: ContractConfig,
     reports: LookupMap<String, ReportRecord>,
+    /// Where the reward is paid, bound by the researcher before funding. Reports registered before this map
+    /// existed have no entry and fall back to the researcher account.
+    payouts: LookupMap<String, AccountId>,
+}
+
+/// Root state before `payouts` existed. Only used by `migrate`.
+#[near(serializers = [borsh])]
+struct StateBeforePayouts {
+    config: ContractConfig,
+    reports: LookupMap<String, ReportRecord>,
 }
 
 /// Outcome of one enclave check after it was validated against the stored pull request.
@@ -71,7 +81,16 @@ impl EscrowContract {
                 liveness_grace_ns: liveness_grace_days * DAY_NS,
             },
             reports: LookupMap::new(b"r"),
+            payouts: LookupMap::new(b"p"),
         }
+    }
+
+    /// One-time upgrade from the state that had no payout map. Existing report records are untouched.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate() -> Self {
+        let old: StateBeforePayouts = env::state_read().unwrap_or_else(|| env::panic_str("no old state"));
+        Self { config: old.config, reports: old.reports, payouts: LookupMap::new(b"p") }
     }
 
     // ---------------------------------------------------------------- registration and chat
@@ -83,6 +102,7 @@ impl EscrowContract {
         report_id: String,
         content_hash: String,
         disclosure_deadline_ns: u64,
+        payout_account: Option<AccountId>,
     ) {
         require!(valid_report_id(&report_id), "report id must be 1-64 chars of a-z, 0-9 or '-'");
         require!(valid_sha256_hex(&content_hash), "content hash must be 64 hex characters");
@@ -97,6 +117,9 @@ impl EscrowContract {
         require!(deposit >= REGISTRATION_FEE, "attach at least 0.01 NEAR for storage");
 
         let researcher = env::predecessor_account_id();
+        if let Some(account) = payout_account.clone() {
+            self.payouts.insert(report_id.clone(), account);
+        }
         self.reports.insert(
             report_id.clone(),
             ReportRecord {
@@ -117,7 +140,7 @@ impl EscrowContract {
         emit(
             "report_registered",
             json!({ "report_id": report_id, "researcher": researcher, "content_hash": content_hash,
-                    "disclosure_deadline_ns": disclosure_deadline_ns }),
+                    "disclosure_deadline_ns": disclosure_deadline_ns, "payout_account": payout_account }),
         );
         let excess = deposit.saturating_sub(REGISTRATION_FEE);
         if !excess.is_zero() {
@@ -140,6 +163,22 @@ impl EscrowContract {
         record.team = Some(team.clone());
         self.save(&report_id, record);
         emit("team_set", json!({ "report_id": report_id, "team": team }));
+    }
+
+    /// The researcher names the NEAR account that receives the reward. Allowed until the escrow is funded,
+    /// so the team can see where its money will go before it locks it.
+    pub fn set_payout_account(&mut self, report_id: String, payout_account: AccountId) {
+        let record = self.record(&report_id);
+        self.require_researcher(&record);
+        require!(
+            matches!(
+                record.status,
+                ReportStatus::Registered | ReportStatus::TermsProposed | ReportStatus::TermsAccepted
+            ),
+            "the payout account can only change before funding"
+        );
+        self.payouts.insert(report_id.clone(), payout_account.clone());
+        emit("payout_account_set", json!({ "report_id": report_id, "payout_account": payout_account }));
     }
 
     /// The researcher invites one person to read the report and the chat. The person is named by the
@@ -236,6 +275,7 @@ impl EscrowContract {
         let mut record = self.record(&report_id);
         self.require_team(&record);
         require!(record.status == ReportStatus::TermsAccepted, "terms must be accepted before funding");
+        require!(self.payouts.contains_key(&report_id), "set a payout account before funding");
         let terms = record.terms.as_ref().expect("terms present");
         require!(env::attached_deposit().as_yoctonear() == terms.amount.0, "attach exactly the agreed amount");
         let now = env::block_timestamp();
@@ -355,9 +395,9 @@ impl EscrowContract {
             (CheckPhase::Payout, Verdict::Merged) => {
                 require!(record.status == ReportStatus::Paying, "no payout in flight");
                 let amount = record.escrow.as_ref().expect("escrow present").amount.0;
-                let researcher = record.researcher.clone();
+                let recipient = self.payouts.get(&report_id).cloned().unwrap_or_else(|| record.researcher.clone());
                 self.save(&report_id, record);
-                Some(self.transfer_then_settle(report_id, researcher, amount, TransferKind::Payout))
+                Some(self.transfer_then_settle(report_id, recipient, amount, TransferKind::Payout))
             }
             (CheckPhase::Payout, Verdict::NotMerged) => {
                 // The merge was not visible the second time, so nothing is paid.
@@ -445,6 +485,11 @@ impl EscrowContract {
 
     pub fn get_report(&self, report_id: String) -> Option<ReportRecord> {
         self.reports.get(&report_id).cloned()
+    }
+
+    /// Where the reward for this report is paid.
+    pub fn get_payout_account(&self, report_id: String) -> Option<AccountId> {
+        self.payouts.get(&report_id).cloned().or_else(|| self.reports.get(&report_id).map(|r| r.researcher.clone()))
     }
 
     pub fn get_config(&self) -> ContractConfig {

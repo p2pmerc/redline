@@ -19,6 +19,7 @@ fn contract_account() -> AccountId { accounts(0) }
 fn researcher() -> AccountId { accounts(1) }
 fn team() -> AccountId { accounts(2) }
 fn stranger() -> AccountId { accounts(3) }
+fn wallet() -> AccountId { "wallet.testnet".parse().unwrap() }
 
 fn ctx(predecessor: AccountId, deposit: u128, at: u64) {
     testing_env!(VMContextBuilder::new()
@@ -40,9 +41,10 @@ fn new_contract() -> EscrowContract {
 fn registered() -> EscrowContract {
     let mut c = new_contract();
     ctx(researcher(), fee(), START);
-    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS);
+    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, None);
     ctx(researcher(), 0, START);
     c.set_team_account(REPORT.into(), team());
+    c.set_payout_account(REPORT.into(), wallet());
     c
 }
 
@@ -112,7 +114,7 @@ fn registers_a_report_and_logs_an_event() {
 fn rejects_duplicate_report_ids() {
     let mut c = registered();
     ctx(researcher(), fee(), START);
-    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS);
+    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, None);
 }
 
 #[test]
@@ -120,7 +122,7 @@ fn rejects_duplicate_report_ids() {
 fn registration_requires_the_storage_fee() {
     let mut c = new_contract();
     ctx(researcher(), 0, START);
-    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS);
+    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, None);
 }
 
 #[test]
@@ -128,7 +130,7 @@ fn registration_requires_the_storage_fee() {
 fn rejects_a_disclosure_deadline_that_is_too_soon() {
     let mut c = new_contract();
     ctx(researcher(), fee(), START);
-    c.register_report(REPORT.into(), HASH.into(), START + DAY_NS);
+    c.register_report(REPORT.into(), HASH.into(), START + DAY_NS, None);
 }
 
 #[test]
@@ -136,7 +138,7 @@ fn rejects_a_disclosure_deadline_that_is_too_soon() {
 fn rejects_a_malformed_content_hash() {
     let mut c = new_contract();
     ctx(researcher(), fee(), START);
-    c.register_report(REPORT.into(), "xyz".into(), START + 60 * DAY_NS);
+    c.register_report(REPORT.into(), "xyz".into(), START + 60 * DAY_NS, None);
 }
 
 #[test]
@@ -614,4 +616,68 @@ fn the_invite_list_is_bounded() {
     let mut c = registered();
     ctx(researcher(), 0, START);
     for n in 0..21u8 { c.invite_member(REPORT.into(), member_hash(n)); }
+}
+
+
+// ------------------------------------------------------------------ payout account
+
+#[test]
+#[should_panic(expected = "set a payout account before funding")]
+fn funding_is_blocked_until_a_payout_account_is_set() {
+    let mut c = new_contract();
+    ctx(researcher(), fee(), START);
+    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, None);
+    ctx(researcher(), 0, START);
+    c.set_team_account(REPORT.into(), team());
+    ctx(team(), 0, START);
+    c.propose_terms(REPORT.into(), U128(AMOUNT), "acme/widgets".into(), TERMS.into());
+    ctx(researcher(), 0, START);
+    c.accept_terms(REPORT.into(), TERMS.into());
+    ctx(team(), AMOUNT, START);
+    c.fund_escrow(REPORT.into());
+}
+
+#[test]
+fn payout_account_can_be_bound_at_registration() {
+    let mut c = new_contract();
+    ctx(researcher(), fee(), START);
+    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, Some(wallet()));
+    assert_eq!(c.get_payout_account(REPORT.into()), Some(wallet()));
+}
+
+#[test]
+fn payout_goes_to_the_bound_account_not_the_researcher_account() {
+    let mut c = funded();
+    answer(&mut c, CheckPhase::Confirm, Some(merged_answer()), START + 100);
+    ctx(researcher(), fee(), START + 200);
+    let _ = c.claim_payout(REPORT.into());
+    answer(&mut c, CheckPhase::Payout, Some(merged_answer()), START + 300);
+    let logs = get_logs();
+    let started = logs.iter().find(|l| l.contains("transfer_started") && l.contains("Payout")).expect("transfer started");
+    assert!(started.contains("wallet.testnet"), "{started}");
+    assert!(!started.contains(&researcher().to_string()), "{started}");
+}
+
+#[test]
+#[should_panic(expected = "can only change before funding")]
+fn payout_account_is_locked_once_funded() {
+    let mut c = funded();
+    ctx(researcher(), 0, START + 1);
+    c.set_payout_account(REPORT.into(), stranger());
+}
+
+#[test]
+#[should_panic(expected = "only the researcher")]
+fn only_the_researcher_sets_the_payout_account() {
+    let mut c = registered();
+    ctx(team(), 0, START + 1);
+    c.set_payout_account(REPORT.into(), stranger());
+}
+
+#[test]
+fn unmigrated_reports_fall_back_to_the_researcher_account() {
+    let mut c = new_contract();
+    ctx(researcher(), fee(), START);
+    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, None);
+    assert_eq!(c.get_payout_account(REPORT.into()), Some(researcher()));
 }
