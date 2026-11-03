@@ -7,9 +7,9 @@ import { CtaSection, SiteFooter } from "@/components/landing/cta-section";
 
 export function LandingPage() {
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       <SiteHeader />
-      <main>
+      <main className="flex-1">
         <HeroSection />
         <HowItWorksSection />
         <PipelineSection />
