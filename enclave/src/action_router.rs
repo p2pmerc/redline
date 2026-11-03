@@ -51,7 +51,7 @@ pub struct Services<'a> {
 #[serde(tag = "action", rename_all = "snake_case")]
 enum Request {
     Pubkey,
-    MergeCheck { repo: String, pull_request: u64 },
+    MergeCheck { repo: String, pull_request: u64, #[serde(default)] expected_author: Option<String> },
     RevealReport { report_id: String, sealed_key: String, eph_pub: String, #[serde(flatten)] auth: CallerAuth },
     ChatKey { report_id: String, eph_pub: String, #[serde(flatten)] auth: CallerAuth },
     PublishKey { report_id: String, sealed_key: String },
@@ -93,8 +93,8 @@ fn handle(request: Request, services: &Services) -> Result<Value, String> {
             Ok(ok(json!({ "public_key": crate::enclave_key::public_key_hex(&secret)?, "enclave_version": env!("CARGO_PKG_VERSION") })))
         }
         // The contract reads this answer, so it is returned bare, not wrapped.
-        Request::MergeCheck { repo, pull_request } => {
-            let answer = check_pull_request(services.http, &repo, pull_request, services.github_token.as_deref());
+        Request::MergeCheck { repo, pull_request, expected_author } => {
+            let answer = check_pull_request(services.http, &repo, pull_request, services.github_token.as_deref(), expected_author.as_deref());
             Ok(serde_json::to_value(answer).map_err(|_| "could not encode the answer".to_string())?)
         }
         Request::RevealReport { report_id, sealed_key, eph_pub, auth } => {

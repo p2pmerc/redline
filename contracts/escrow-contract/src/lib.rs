@@ -498,7 +498,7 @@ impl EscrowContract {
             .request_execution(
                 outlayer_interface::execution_source(&self.config),
                 outlayer_interface::resource_limits(),
-                outlayer_interface::merge_check_input(report_id, &terms.repo, pull_request, phase),
+                outlayer_interface::merge_check_input(report_id, &terms.repo, pull_request, phase, None),
                 Some(outlayer_interface::secrets_ref(&self.config)),
                 "Text".to_string(),
                 Some(env::predecessor_account_id()),

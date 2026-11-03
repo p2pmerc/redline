@@ -44,8 +44,8 @@ pub fn resource_limits() -> Value {
 }
 
 /// Input for the enclave action that checks a pull request.
-pub fn merge_check_input(report_id: &str, repo: &str, pull_request: u64, phase: CheckPhase) -> String {
-    json!({
+pub fn merge_check_input(report_id: &str, repo: &str, pull_request: u64, phase: CheckPhase, expected_author: Option<&str>) -> String {
+    let mut body = json!({
         "action": "merge_check",
         "report_id": report_id,
         "repo": repo,
@@ -55,8 +55,11 @@ pub fn merge_check_input(report_id: &str, repo: &str, pull_request: u64, phase: 
             CheckPhase::Payout => "payout",
             CheckPhase::Refund => "refund",
         },
-    })
-    .to_string()
+    });
+    if let Some(author) = expected_author.map(|s| s.trim().trim_start_matches('@')).filter(|s| !s.is_empty()) {
+        body["expected_author"] = json!(author);
+    }
+    body.to_string()
 }
 
 /// What the enclave answers. Anything that does not parse is treated as `unknown`.

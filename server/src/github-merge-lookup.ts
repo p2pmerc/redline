@@ -6,7 +6,7 @@ import type { MergeAnswer } from "./escrow-ledger.js";
 import { REPO_PATTERN } from "./escrow-ledger.js";
 
 export type Fetcher = (url: string, init: { headers: Record<string, string> }) => Promise<{ status: number; json: () => Promise<unknown> }>;
-export type MergeLookup = (repo: string, pullRequest: number) => Promise<MergeAnswer & { reason?: string }>;
+export type MergeLookup = (repo: string, pullRequest: number, expectedAuthor?: string) => Promise<MergeAnswer & { reason?: string }>;
 
 const isSha = (v: unknown): v is string => typeof v === "string" && /^[0-9a-fA-F]{40}$/.test(v);
 const sameRepo = (a: unknown, b: string) => typeof a === "string" && a.toLowerCase() === b.toLowerCase();
@@ -24,8 +24,9 @@ export function createMergeLookup(fetcher: Fetcher = fetch as unknown as Fetcher
     return { status: res.status, body };
   };
 
-  return async (repo, pullRequest) => {
+  return async (repo, pullRequest, expectedAuthor) => {
     const unknown = (reason: string) => ({ status: "unknown" as const, repo, pullRequest, reason });
+    const wantedAuthor = expectedAuthor?.trim().replace(/^@/, "").toLowerCase();
     if (!REPO_PATTERN.test(repo) || !Number.isInteger(pullRequest) || pullRequest <= 0) return unknown("invalid repository or pull request number");
     const base = `https://api.github.com/repos/${repo}`;
     try {
@@ -41,6 +42,14 @@ export function createMergeLookup(fetcher: Fetcher = fetch as unknown as Fetcher
       if (pr.status !== 200) return unknown("could not read the pull request");
       if (pr.body.number !== pullRequest) return unknown("pull request number does not match");
       if (!sameRepo(pr.body.base?.repo?.full_name, repo)) return unknown("pull request targets another repository");
+
+      if (wantedAuthor) {
+        const login = typeof pr.body.user?.login === "string" ? pr.body.user.login.replace(/^@/, "").toLowerCase() : "";
+        if (!login) return unknown("pull request has no author login");
+        if (login !== wantedAuthor) {
+          return unknown(`pull request author @${login} does not match the researcher's linked GitHub @${wantedAuthor}`);
+        }
+      }
 
       const endpoint = await get(`${base}/pulls/${pullRequest}/merge`);
       const viaEndpoint = endpoint.status === 204 ? true : endpoint.status === 404 ? false : undefined;

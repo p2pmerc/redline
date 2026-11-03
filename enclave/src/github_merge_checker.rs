@@ -47,7 +47,7 @@ fn json_get(fetcher: &dyn HttpFetcher, url: &str, bearer: Option<&str>) -> Resul
     Ok((status, value))
 }
 
-pub fn check_pull_request(fetcher: &dyn HttpFetcher, repo: &str, pull_request: u64, token: Option<&str>) -> MergeAnswer {
+pub fn check_pull_request(fetcher: &dyn HttpFetcher, repo: &str, pull_request: u64, token: Option<&str>, expected_author: Option<&str>) -> MergeAnswer {
     if !valid_repo(repo) || pull_request == 0 {
         return MergeAnswer::unknown(repo, pull_request, "invalid repository or pull request number");
     }
@@ -77,6 +77,16 @@ pub fn check_pull_request(fetcher: &dyn HttpFetcher, repo: &str, pull_request: u
     }
     if !pr["base"]["repo"]["full_name"].as_str().map_or(false, |n| n.eq_ignore_ascii_case(repo)) {
         return MergeAnswer::unknown(repo, pull_request, "pull request targets another repository");
+    }
+
+    if let Some(wanted) = expected_author.map(|s| s.trim().trim_start_matches('@').to_ascii_lowercase()).filter(|s| !s.is_empty()) {
+        let login = pr["user"]["login"].as_str().unwrap_or("").trim().trim_start_matches('@').to_ascii_lowercase();
+        if login.is_empty() {
+            return MergeAnswer::unknown(repo, pull_request, "pull request has no author login");
+        }
+        if login != wanted {
+            return MergeAnswer::unknown(repo, pull_request, "pull request author does not match the researcher's linked GitHub");
+        }
     }
 
     let merged_flag = pr["merged"].as_bool();
@@ -172,7 +182,7 @@ mod tests {
     }
 
     fn run(world: &FakeGithub) -> MergeAnswer {
-        check_pull_request(world, "acme/widgets", 42, None)
+        check_pull_request(world, "acme/widgets", 42, None, None)
     }
 
     #[test]
@@ -247,8 +257,17 @@ mod tests {
         }
         assert!(valid_repo("acme/widgets.rs"));
         let w = world((200, String::new()), None);
-        assert_eq!(check_pull_request(&w, "acme/../x", 1, None).status, "unknown");
-        assert_eq!(check_pull_request(&w, "acme/widgets", 0, None).status, "unknown");
+        assert_eq!(check_pull_request(&w, "acme/../x", 1, None, None).status, "unknown");
+        assert_eq!(check_pull_request(&w, "acme/widgets", 0, None, None).status, "unknown");
+    }
+
+    #[test]
+    fn author_must_match_when_expected() {
+        let mut body: serde_json::Value = serde_json::from_str(&pr_body(true, "closed", "main", Some(SHA), "acme/widgets")).unwrap();
+        body["user"] = serde_json::json!({ "login": "alice" });
+        let w = world((200, body.to_string()), Some(204));
+        assert_eq!(check_pull_request(&w, "acme/widgets", 42, None, Some("alice")).status, "merged");
+        assert_eq!(check_pull_request(&w, "acme/widgets", 42, None, Some("bob")).status, "unknown");
     }
 
     #[test]
