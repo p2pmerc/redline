@@ -29,6 +29,7 @@ const MAX_DISCLOSURE_WINDOW_NS: u64 = 365 * DAY_NS;
 const STALE_CHECK_NS: u64 = 15 * 60 * 1_000_000_000;
 /// Paid by the researcher on registration. Covers the storage the record occupies.
 const REGISTRATION_FEE: NearToken = NearToken::from_millinear(10);
+const MAX_MEMBERS: usize = 20;
 const CHECK_CALLBACK_GAS: Gas = Gas::from_tgas(25);
 const SETTLE_CALLBACK_GAS: Gas = Gas::from_tgas(10);
 
@@ -104,6 +105,7 @@ impl EscrowContract {
                 disclosure_deadline_ns,
                 registered_at_ns: now,
                 team: None,
+                members: Vec::new(),
                 terms: None,
                 escrow: None,
                 status: ReportStatus::Registered,
@@ -138,6 +140,37 @@ impl EscrowContract {
         record.team = Some(team.clone());
         self.save(&report_id, record);
         emit("team_set", json!({ "report_id": report_id, "team": team }));
+    }
+
+    /// The researcher invites one person to read the report and the chat. The person is named by the
+    /// hash of a Privy-linked identity, and the enclave checks it against their verified sign-in.
+    pub fn invite_member(&mut self, report_id: String, id_hash: String) {
+        require!(valid_sha256_hex(&id_hash), "identity hash must be 64 hex characters");
+        let mut record = self.record(&report_id);
+        self.require_researcher(&record);
+        require!(record.published_at_ns.is_none(), "report is already published");
+        let id_hash = id_hash.to_lowercase();
+        match record.members.iter_mut().find(|m| m.id_hash == id_hash) {
+            Some(existing) => existing.revoked = false,
+            None => {
+                require!(record.members.len() < MAX_MEMBERS, "too many invited members");
+                record.members.push(MemberInvite { id_hash: id_hash.clone(), revoked: false });
+            }
+        }
+        self.save(&report_id, record);
+        emit("member_invited", json!({ "report_id": report_id, "id_hash": id_hash }));
+    }
+
+    /// The researcher withdraws an invite. The enclave stops handing that person keys on its next read.
+    pub fn revoke_member(&mut self, report_id: String, id_hash: String) {
+        let mut record = self.record(&report_id);
+        self.require_researcher(&record);
+        let id_hash = id_hash.to_lowercase();
+        let member = record.members.iter_mut().find(|m| m.id_hash == id_hash);
+        require!(member.is_some(), "that person was not invited");
+        member.unwrap().revoked = true;
+        self.save(&report_id, record);
+        emit("member_revoked", json!({ "report_id": report_id, "id_hash": id_hash }));
     }
 
     /// Either side logs the hash of one chat message. The text itself stays off chain.

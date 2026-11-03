@@ -553,3 +553,65 @@ fn only_the_owner_can_update_the_enclave_source() {
     ctx(stranger(), 0, START);
     c.update_enclave_source("https://github.com/example/x".into(), None, U128(1));
 }
+
+// ------------------------------------------------------------------ invited readers
+
+fn member_hash(n: u8) -> String { format!("{:02x}", n).repeat(32) }
+
+#[test]
+fn the_researcher_invites_and_revokes_readers() {
+    let mut c = registered();
+    ctx(researcher(), 0, START);
+    c.invite_member(REPORT.into(), member_hash(1));
+    c.invite_member(REPORT.into(), member_hash(1));
+    c.invite_member(REPORT.into(), member_hash(2));
+    let record = c.get_report(REPORT.into()).unwrap();
+    assert_eq!(record.members.len(), 2, "inviting twice does not duplicate");
+    c.revoke_member(REPORT.into(), member_hash(1));
+    let record = c.get_report(REPORT.into()).unwrap();
+    assert!(record.members[0].revoked && !record.members[1].revoked);
+    c.invite_member(REPORT.into(), member_hash(1));
+    assert!(!c.get_report(REPORT.into()).unwrap().members[0].revoked, "a re-invite lifts the revocation");
+}
+
+#[test]
+#[should_panic(expected = "only the researcher")]
+fn the_team_cannot_invite_readers() {
+    let mut c = registered();
+    ctx(team(), 0, START);
+    c.invite_member(REPORT.into(), member_hash(1));
+}
+
+#[test]
+#[should_panic(expected = "only the researcher")]
+fn strangers_cannot_revoke_readers() {
+    let mut c = registered();
+    ctx(researcher(), 0, START);
+    c.invite_member(REPORT.into(), member_hash(1));
+    ctx(stranger(), 0, START);
+    c.revoke_member(REPORT.into(), member_hash(1));
+}
+
+#[test]
+#[should_panic(expected = "64 hex")]
+fn invites_need_a_proper_identity_hash() {
+    let mut c = registered();
+    ctx(researcher(), 0, START);
+    c.invite_member(REPORT.into(), "bob@example.com".into());
+}
+
+#[test]
+#[should_panic(expected = "was not invited")]
+fn revoking_someone_never_invited_fails() {
+    let mut c = registered();
+    ctx(researcher(), 0, START);
+    c.revoke_member(REPORT.into(), member_hash(9));
+}
+
+#[test]
+#[should_panic(expected = "too many")]
+fn the_invite_list_is_bounded() {
+    let mut c = registered();
+    ctx(researcher(), 0, START);
+    for n in 0..21u8 { c.invite_member(REPORT.into(), member_hash(n)); }
+}

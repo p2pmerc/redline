@@ -58,12 +58,24 @@ pub struct ReportRecord {
     pub disclosure_deadline_ns: u64,
     pub registered_at_ns: u64,
     pub team: Option<AccountId>,
+    /// People the researcher invited to read the report and its chat. The enclave reads this list.
+    pub members: Vec<MemberInvite>,
     pub terms: Option<AgreedTerms>,
     pub escrow: Option<EscrowDetails>,
     pub status: ReportStatus,
     pub message_count: u64,
     pub published_at_ns: Option<u64>,
     pub evidence_hash: Option<String>,
+}
+
+/// One invited reader. Only a hash is stored, so no email address or handle is public.
+/// `id_hash` is SHA-256 of `redline:invite:v1:<kind>:<lowercase handle>`, the same value the enclave
+/// derives from the caller's Privy-verified accounts.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemberInvite {
+    pub id_hash: String,
+    pub revoked: bool,
 }
 
 /// Which question the enclave is being asked. Decides what happens with the answer.
