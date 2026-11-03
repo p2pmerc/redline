@@ -18,7 +18,7 @@ import { severityTone } from "@/lib/report-stages";
 
 function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-background">
+    <div className="page-glow flex min-h-dvh flex-col bg-background">
       <SiteHeader />
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-6">{children}</main>
       <SiteFooter />
@@ -31,6 +31,7 @@ export function DisclosuresPage() {
   return (
     <PublicLayout>
       <div className="mb-8 space-y-2">
+        <p className="eyebrow">Public record</p>
         <h1 className="flex items-center gap-2 text-[1.75rem] font-semibold tracking-tight"><Megaphone size={26} /> Public disclosures</h1>
         <p className="text-body text-muted-foreground">Reports that were unsealed after their window closed, or fixed and paid through escrow. Sealed reports are never listed.</p>
       </div>
@@ -86,7 +87,7 @@ export function DisclosureDetailPage() {
             </div>
             {data.bodyPublished ? <ReportEditor value={data.body} editable={false} />
               : <EmptyState icon={LockKey} title="The write-up is still sealed" description={data.summary || "The researcher has not unsealed this report. The fix was merged and the payout is on-chain below."} />}
-            <section className="rounded-2xl bg-surface-3 p-3 shadow-surface-2">
+            <section className="card-hairline p-3">
               <h2 className="px-2 py-2 text-subtitle font-semibold">On-chain evidence</h2>
               <ActivityTimeline events={data.timeline} />
             </section>
@@ -114,7 +115,7 @@ export function ResearcherPage() {
     <PublicLayout>
       {loading ? (
         <div className="space-y-6" aria-busy="true">
-          <div className="h-40 animate-pulse rounded-2xl bg-surface-3 shadow-surface-2" />
+          <div className="h-40 animate-pulse card-hairline" />
           <div className="grid gap-4 md:grid-cols-2">{[0, 1].map((i) => <ReportCardSkeleton key={i} />)}</div>
         </div>
       ) : error?.message.includes("No researcher") ? (
@@ -123,7 +124,7 @@ export function ResearcherPage() {
       ) : error || !data ? <ErrorState message={error?.message ?? "Not found."} onRetry={reload} />
       : (
         <div className="space-y-8">
-          <section className="flex flex-col gap-5 rounded-2xl bg-surface-3 p-6 shadow-surface-2 sm:flex-row">
+          <section className="card-hairline flex flex-col gap-5 p-6 sm:flex-row">
             <ProfileAvatar size="xl" name={data.profile.displayName} seed={data.profile.avatarSeed} className="size-20" />
             <div className="min-w-0 flex-1 space-y-3">
               <div>
@@ -150,7 +151,7 @@ export function ResearcherPage() {
               ["Disclosed", String(data.stats.disclosed)],
               ["Earned", formatNear(data.stats.totalPaidNear)],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-2xl bg-surface-3 p-4 shadow-surface-2">
+              <div key={label} className="card-hairline p-4">
                 <p className="text-caption text-muted-foreground">{label}</p>
                 <p className="text-title font-semibold tabular-nums">{value}</p>
               </div>
@@ -158,7 +159,7 @@ export function ResearcherPage() {
           </div>
 
           <section className="space-y-4">
-            <h2 className="text-title font-semibold">Disclosed and paid reports</h2>
+            <div><p className="eyebrow mb-1">Public record</p><h2 className="text-title font-semibold">Disclosed and paid reports</h2></div>
             {data.reports.length === 0
               ? <EmptyState icon={LockKey} title="Nothing public yet" description={`${data.profile.displayName} has not disclosed a report or been paid for a fix yet. Sealed reports are never shown.`} />
               : <div className="grid gap-4 md:grid-cols-2">{data.reports.map((r, i) => <ReportCard key={r.id} report={r} index={i} to={`/disclosures/${r.id}`} />)}</div>}
