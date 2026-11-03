@@ -40,7 +40,11 @@ export function ActivityTimeline({ events }: { events: TimelineEvent[] }) {
                 <time className="shrink-0 text-caption text-muted-foreground" dateTime={e.at}>{relativeTime(e.at)}</time>
               </div>
               {e.detail && <p className="text-body text-muted-foreground">{e.detail}</p>}
-              {e.txHash && (
+              {e.txHash && (e.txHash.startsWith("preview:") ? (
+                <span className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground" title="Recorded on the preview ledger, not on NEAR">
+                  preview ledger · {shortHash(e.txHash.slice(8))}
+                </span>
+              ) : (
                 <a
                   href={explorerTxUrl(e.txHash)}
                   target="_blank"
@@ -49,7 +53,7 @@ export function ActivityTimeline({ events }: { events: TimelineEvent[] }) {
                 >
                   {shortHash(e.txHash)} <ArrowSquareOut size={11} />
                 </a>
-              )}
+              ))}
             </div>
           </li>
         );
