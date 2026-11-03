@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 
 type Theme = "light" | "dark";
-const storageKey = "redline-theme";
+/** New key: older builds saved the OS preference automatically, which must not count as a choice. */
+const storageKey = "redline-theme-choice";
 
-function initialTheme(): Theme {
-  const saved = localStorage.getItem(storageKey);
-  if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+/** Light unless the visitor picked dark with the toggle. The OS colour scheme is ignored. */
+export function initialTheme(storage: Pick<Storage, "getItem"> = localStorage): Theme {
+  try {
+    return storage.getItem(storageKey) === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
 }
 
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [theme, setTheme] = useState<Theme>(() => initialTheme());
 
   useEffect(() => {
     const root = document.documentElement;
@@ -18,10 +22,13 @@ export function useTheme() {
     root.classList.toggle("dark", theme === "dark");
     root.style.colorScheme = theme;
     const timer = setTimeout(() => root.classList.remove("transitioning"), 200);
-    localStorage.setItem(storageKey, theme);
     return () => clearTimeout(timer);
   }, [theme]);
 
-  const toggle = useCallback(() => setTheme((t) => (t === "dark" ? "light" : "dark")), []);
+  const toggle = useCallback(() => setTheme((t) => {
+    const next = t === "dark" ? "light" : "dark";
+    try { localStorage.setItem(storageKey, next); } catch { /* storage blocked: the choice lasts for this visit */ }
+    return next;
+  }), []);
   return { theme, toggle };
 }
