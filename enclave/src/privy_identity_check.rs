@@ -76,7 +76,7 @@ fn decode_json(part: &str, what: &str) -> Result<Value, String> {
 /// A normalized linked account of a Privy user.
 #[derive(Debug, PartialEq, Clone)]
 pub struct LinkedIdentity {
-    /// "near", "email", "twitter", "telegram" or "github".
+    /// "near", "email" (a Privy email or a Google sign-in), "twitter", "telegram" or "github".
     pub kind: String,
     /// Lowercase NEAR account, email address or handle without a leading @.
     pub handle: String,
@@ -92,6 +92,8 @@ pub fn linked_identities(user: &Value) -> Vec<LinkedIdentity> {
                     ("near", account["address"].as_str()?)
                 }
                 "email" => ("email", account["address"].as_str().or_else(|| account["email"].as_str())?),
+                // A Google sign-in is a verified email address, so it counts as the email identity.
+                "google_oauth" => ("email", account["email"].as_str().or_else(|| account["address"].as_str())?),
                 "twitter_oauth" => ("twitter", account["username"].as_str()?),
                 "github_oauth" => ("github", account["username"].as_str()?),
                 "telegram" => ("telegram", account["username"].as_str()?),
@@ -219,10 +221,13 @@ mod tests {
             {"type": "twitter_oauth", "username": "Ada_X"},
             {"type": "github_oauth", "username": "ada"},
             {"type": "telegram", "username": "ada_t"},
+            {"type": "google_oauth", "email": "Ada.Work@Gmail.com", "subject": "1", "name": "Ada"},
+            {"type": "google_oauth", "subject": "2"},
             {"type": "passkey"}
         ]});
         let signed = SignedInUser { user_id: "u".into(), identities: linked_identities(&user) };
-        assert_eq!(signed.identities.len(), 5);
+        assert_eq!(signed.identities.len(), 6);
+        assert!(signed.holds("email", "ada.work@gmail.com"));
         assert!(signed.holds("near", "abc.testnet"));
         assert!(signed.holds("email", "ada@example.com"));
         assert!(signed.holds("twitter", "@ada_x"));
