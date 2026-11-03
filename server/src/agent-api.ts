@@ -10,6 +10,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { rateLimit } from "express-rate-limit";
 import type { ApiDeps } from "./api-routes.js";
 import type { StoredReport } from "./report-records.js";
+import { buildLeaderboard, totalsOf } from "./leaderboard.js";
 import { isPublic, partyView, publicView, roleOf, stageOf, type PublicAuthor } from "./report-views.js";
 
 /** sha256 of the enclave WASM build documented in the README. Used when the contract pins no version. */
@@ -170,6 +171,52 @@ export function createAgentRouter(deps: ApiDeps): express.Router {
     });
   }));
 
+
+  /** One public disclosure, reduced to what the leaderboard counts. */
+  const boardItem = (r: StoredReport) => {
+    const s = summary(r);
+    return { researcher: s.researcher, severity: s.severity, outcome: s.outcome, bountyNear: s.bountyNear, paidAt: s.timestamps.paidAt };
+  };
+  const HANDLE_PATTERN = /^[a-z0-9_-]{3,30}$/;
+
+  router.get("/leaderboard", (req, res) => {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 50) || 50));
+    const offset = Math.max(0, Number(req.query.offset ?? 0) || 0);
+    const profiles = (deps.profiles?.all() ?? []).map((p) => ({ handle: p.handle, displayName: p.displayName, avatarSeed: p.avatarSeed }));
+    const board = buildLeaderboard(publicReports().map(boardItem), profiles);
+    res.json({
+      total: board.length,
+      limit,
+      offset,
+      ledgerMode: config.ledgerMode,
+      rankedBy: "totalEarnedNear (fixed-and-paid reports), then paid count, then disclosures, then handle",
+      researchers: board.slice(offset, offset + limit).map((e) => ({ ...e, links: { profile: `${origin}/researchers/${e.handle}`, api: `${origin}/api/v1/researchers/${e.handle}` } })),
+    });
+  });
+
+  router.get("/researchers/:handle", (req, res) => {
+    const handle = String(req.params.handle).toLowerCase();
+    if (!HANDLE_PATTERN.test(handle)) throw new V1Error(400, "invalid_handle", "Handles are 3 to 30 characters: a-z, 0-9, dash or underscore.");
+    const p = deps.profiles?.byHandle(handle);
+    if (!p) throw new V1Error(404, "not_found", "No researcher has that handle.");
+    const mine = publicReports().filter((r) => r.researcherId === p.userId);
+    const all = buildLeaderboard(publicReports().map(boardItem), deps.profiles!.all().map((x) => ({ handle: x.handle, displayName: x.displayName, avatarSeed: x.avatarSeed })));
+    res.json({
+      handle: p.handle,
+      displayName: p.displayName,
+      bio: p.bio,
+      skills: p.skills,
+      links: p.links,
+      avatarSeed: p.avatarSeed,
+      joinedAt: p.createdAt,
+      rank: all.find((e) => e.handle === p.handle)?.rank ?? null,
+      ...totalsOf(mine.map(boardItem)),
+      ledgerMode: config.ledgerMode,
+      disclosures: mine.map(summary),
+      profilePage: `${origin}/researchers/${p.handle}`,
+    });
+  });
+
   router.get("/reports/:id", handler(async (req, res) => {
     const id = idOf(req);
     const r = store.get(id);
@@ -329,6 +376,8 @@ export function describeApi(origin: string) {
     endpoints: [
       { method: "GET", path: `${origin}/api/v1/disclosures`, query: "status=paid|published, limit (max 100), offset", about: "Published and fixed-and-paid reports with bounty, PR and transaction hashes." },
       { method: "GET", path: `${origin}/api/v1/disclosures/{id}`, about: "Full public detail: published body (when unsealed), proof fields, enclave info, public timeline." },
+      { method: "GET", path: `${origin}/api/v1/leaderboard`, query: "limit (max 100), offset", about: "Researchers ranked by NEAR earned from paid reports, with disclosure and paid counts and highest severity." },
+      { method: "GET", path: `${origin}/api/v1/researchers/{handle}`, about: "One researcher's public profile, totals, rank and every public disclosure (bounty, PR, tx hashes). No emails, wallets or private reports." },
       { method: "GET", path: `${origin}/api/v1/reports/{id}`, about: "No auth: metadata and hashes only for private reports. Bearer of a party: the encrypted record. Wrong token: 401 or 403." },
       { method: "GET", path: `${origin}/api/v1/verify/{id}`, about: "Live check of the escrow contract, the GitHub merge and the fund and payout transactions. 20 calls a minute." },
     ],
@@ -361,6 +410,8 @@ Agents get a read-only, unauthenticated JSON API. It never returns report plaint
 - [Index](${origin}/api/v1): endpoint list
 - [Disclosures](${origin}/api/v1/disclosures): published and paid reports (bounty, PR URL, fund and payout tx hashes)
 - [One disclosure](${origin}/api/v1/disclosures/{id}): full public detail, proof fields, enclave info
+- [Leaderboard](${origin}/api/v1/leaderboard): researchers ranked by NEAR earned from paid reports
+- [One researcher](${origin}/api/v1/researchers/{handle}): public profile, totals and all their public disclosures
 - [Report metadata](${origin}/api/v1/reports/{id}): no auth, private reports return hashes only; 401 or 403 on a wrong token
 - [Verify](${origin}/api/v1/verify/{id}): checks the escrow contract, the GitHub merge and the transactions live
 - [Manifest](${origin}/.well-known/redline.json)
@@ -368,5 +419,6 @@ Agents get a read-only, unauthenticated JSON API. It never returns report plaint
 ## Optional
 - [Source and docs](https://github.com/p2pmerc/redline#for-ai-agents)
 - [Public disclosures page](${origin}/disclosures)
+- [Researcher leaderboard page](${origin}/leaderboard)
 `;
 }

@@ -135,7 +135,7 @@ describe("agent API v1", () => {
   });
 
   it("serves the index, discovery files, and rejects writes", async () => {
-    expect((await get("/api/v1")).json.endpoints).toHaveLength(4);
+    expect((await get("/api/v1")).json.endpoints).toHaveLength(6);
     expect((await get("/.well-known/redline.json")).json.api).toBe("https://redline.example/api/v1");
     expect((await get("/llms.txt")).text).toContain("https://redline.example/api/v1/disclosures");
     const post = await fetch(`${url}/api/v1/disclosures`, { method: "POST" });
