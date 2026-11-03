@@ -1,17 +1,19 @@
 import {
   LockKey, PaperPlaneTilt, UserCheck, UserMinus, ChatCircleText, Signature, Coins, GitPullRequest, GitMerge,
-  HandCoins, ArrowUUpLeft, BellRinging, Megaphone, ArrowSquareOut, type Icon,
+  HandCoins, ArrowUUpLeft, BellRinging, Megaphone, ArrowSquareOut, Scroll, type Icon,
 } from "@phosphor-icons/react";
 import { explorerTxUrl } from "@/lib/redline-config";
 import { relativeTime, shortHash } from "@/lib/format";
 import type { TimelineEvent } from "@/lib/redline-types";
 
-const kindIcon: Record<TimelineEvent["kind"], Icon> = {
+/** Every kind the server may emit. Unknown kinds fall back to Scroll so a new event never crashes the tab. */
+export const kindIcon: Record<TimelineEvent["kind"], Icon> = {
   sealed: LockKey,
   invite_sent: PaperPlaneTilt,
   invite_redeemed: UserCheck,
   invite_revoked: UserMinus,
   message: ChatCircleText,
+  terms_proposed: Scroll,
   agreement_signed: Signature,
   escrow_funded: Coins,
   pr_linked: GitPullRequest,
@@ -22,13 +24,18 @@ const kindIcon: Record<TimelineEvent["kind"], Icon> = {
   published: Megaphone,
 };
 
+/** Resolves an icon for a timeline kind, including kinds a stale client has not seen yet. */
+export function iconForKind(kind: string): Icon {
+  return (kindIcon as Record<string, Icon>)[kind] ?? Scroll;
+}
+
 export function ActivityTimeline({ events }: { events: TimelineEvent[] }) {
   const ordered = [...events].sort((a, b) => b.at.localeCompare(a.at));
   return (
     <ol className="relative space-y-1">
       <span aria-hidden className="absolute bottom-3 left-[17px] top-3 w-px bg-border" />
       {ordered.map((e) => {
-        const EventIcon = kindIcon[e.kind];
+        const EventIcon = iconForKind(e.kind);
         return (
           <li key={e.id} className="relative flex gap-3 rounded-xl p-2 transition-colors hover:bg-hover">
             <span className="relative z-10 flex size-[34px] shrink-0 items-center justify-center rounded-full bg-surface-3 text-foreground shadow-surface-2">

@@ -33,6 +33,7 @@ export interface TimelineEvent {
     | "invite_redeemed"
     | "invite_revoked"
     | "message"
+    | "terms_proposed"
     | "agreement_signed"
     | "escrow_funded"
     | "pr_linked"
