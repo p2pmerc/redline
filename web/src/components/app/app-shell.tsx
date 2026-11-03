@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Files, FilePlus, Megaphone, SignOut, List, X, GearSix, type Icon } from "@phosphor-icons/react";
+import { Files, FilePlus, Megaphone, SignOut, List, X, GearSix, MagnifyingGlass, type Icon } from "@phosphor-icons/react";
 import { RedlineWordmark } from "@/components/redline-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { useProfile } from "@/lib/profile-context";
 import { useSession } from "@/lib/auth-context";
+import { CommandPalette } from "@/components/app/command-palette";
+import { useIsMac } from "@/components/ui/command-menu";
+import { listReports } from "@/lib/data-source";
+import { useAsync } from "@/lib/use-async";
 import { cn } from "@/lib/utils";
 
 type NavEntry = { to: string; label: string; icon: Icon; end?: boolean };
@@ -21,11 +25,23 @@ const navGroups: { label: string; items: NavEntry[] }[] = [
   { label: "Account", items: [{ to: "/app/settings", label: "Settings", icon: GearSix }] },
 ];
 
-function NavItems({ onNavigate }: { onNavigate?: () => void }) {
+function SearchField({ onOpen }: { onOpen: () => void }) {
+  const mac = useIsMac();
+  return (
+    <button type="button" onClick={onOpen} aria-label="Search" aria-keyshortcuts="Meta+K Control+K"
+      className="search-field flex w-full items-center gap-2 px-3 py-2 text-left text-subtitle text-muted-foreground transition-shadow hover:text-foreground">
+      <MagnifyingGlass size={16} />
+      <span className="flex-1 truncate">Search anything…</span>
+      <kbd className="kbd-chip font-sans">{mac ? "⌘K" : "Ctrl K"}</kbd>
+    </button>
+  );
+}
+
+function NavItems({ onNavigate, openCount }: { onNavigate?: () => void; openCount?: number }) {
   return (
     <nav aria-label="App" className="space-y-5">
-      {navGroups.map((group) => (
-        <div key={group.label} className="space-y-1">
+      {navGroups.map((group, gi) => (
+        <div key={group.label} className={cn("space-y-1", gi > 0 && "border-t border-border pt-4")}>
           <p className="section-label px-3 pb-1">{group.label}</p>
           {group.items.map((item) => (
             <NavLink
@@ -43,7 +59,8 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
               {({ isActive }) => (
                 <>
                   <item.icon size={18} weight={isActive ? "fill" : "regular"} />
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {item.to === "/app" && !!openCount && <span className="count-badge" aria-label={`${openCount} open`}>{openCount > 9 ? "9+" : openCount}</span>}
                 </>
               )}
             </NavLink>
@@ -77,13 +94,19 @@ function UserBlock() {
 
 export function AppShell() {
   const [open, setOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const location = useLocation();
+  const { profile } = useProfile();
+  const { data: reports } = useAsync(listReports, []);
+  const openCount = (reports ?? []).filter((r) => !["paid", "published", "refunded"].includes(r.stage)).length;
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="page-glow min-h-dvh bg-background">
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} reports={reports ?? []} handle={profile?.handle} />
       <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col justify-between border-r border-border sidebar-texture p-4 lg:flex">
-        <div className="space-y-8">
-          <Link to="/" aria-label="Redline home" className="block px-2 pt-1"><RedlineWordmark /></Link>
-          <NavItems />
+        <div className="space-y-5">
+          <Link to="/" aria-label="Redline home" className="block px-2 pt-1 pb-1"><RedlineWordmark /></Link>
+          <SearchField onOpen={() => setSearchOpen(true)} />
+          <NavItems openCount={openCount} />
         </div>
         <UserBlock />
       </aside>
@@ -106,7 +129,8 @@ export function AppShell() {
             initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
             transition={{ type: "spring", duration: 0.3, bounce: 0 }}
           >
-            <NavItems onNavigate={() => setOpen(false)} />
+            <SearchField onOpen={() => { setOpen(false); setSearchOpen(true); }} />
+            <NavItems onNavigate={() => setOpen(false)} openCount={openCount} />
             <UserBlock />
           </motion.div>
         )}
