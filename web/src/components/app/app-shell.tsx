@@ -9,35 +9,43 @@ import { Badge } from "@/components/ui/badge";
 import { useSession } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 
-const nav: { to: string; label: string; icon: Icon; end?: boolean }[] = [
-  { to: "/app", label: "Reports", icon: Files, end: true },
-  { to: "/app/reports/new", label: "New report", icon: FilePlus },
-  { to: "/disclosures", label: "Public disclosures", icon: Megaphone },
+type NavEntry = { to: string; label: string; icon: Icon; end?: boolean };
+const navGroups: { label: string; items: NavEntry[] }[] = [
+  { label: "Workspace", items: [
+    { to: "/app", label: "Reports", icon: Files, end: true },
+    { to: "/app/reports/new", label: "New report", icon: FilePlus },
+  ] },
+  { label: "Public", items: [{ to: "/disclosures", label: "Public disclosures", icon: Megaphone }] },
 ];
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <nav aria-label="App" className="space-y-0.5">
-      {nav.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.end}
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            cn(
-              "flex items-center gap-3 rounded-xl px-3 py-2 text-subtitle transition-colors",
-              isActive ? "bg-active font-medium text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground",
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <item.icon size={18} weight={isActive ? "fill" : "regular"} />
-              {item.label}
-            </>
-          )}
-        </NavLink>
+    <nav aria-label="App" className="space-y-5">
+      {navGroups.map((group) => (
+        <div key={group.label} className="space-y-1">
+          <p className="section-label px-3 pb-1">{group.label}</p>
+          {group.items.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 rounded-full px-3 py-2 text-subtitle transition-colors",
+                  isActive ? "nav-active font-medium" : "text-muted-foreground hover:bg-hover hover:text-foreground",
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <item.icon size={18} weight={isActive ? "fill" : "regular"} />
+                  {item.label}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
       ))}
     </nav>
   );
@@ -67,7 +75,7 @@ export function AppShell() {
   const location = useLocation();
   return (
     <div className="min-h-dvh bg-background">
-      <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col justify-between border-r border-border/60 bg-surface-1 p-4 lg:flex">
+      <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col justify-between border-r border-border sidebar-texture p-4 lg:flex">
         <div className="space-y-8">
           <Link to="/" aria-label="Redline home" className="block px-2 pt-1"><RedlineWordmark /></Link>
           <NavItems />

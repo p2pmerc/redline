@@ -452,7 +452,7 @@ const AccordionGroup = forwardRef<HTMLDivElement, AccordionGroupProps>(
             <AnimatePresence>
               {focusRect && (
                 <motion.div
-                  className={`absolute ${shape.focusRing} pointer-events-none z-20 border border-[color:var(--focus-ring,#6B97FF)]`}
+                  className={`absolute ${shape.focusRing} pointer-events-none z-20 border border-[color:var(--focus-ring,#F25C05)]`}
                   initial={false}
                   animate={{
                     left: focusRect.left - 2,
@@ -717,7 +717,7 @@ const AccordionTrigger = forwardRef<HTMLButtonElement, AccordionTriggerProps>(
             className={cn(
               `relative z-10 flex items-center ${sizeClasses.gap} ${shape.item} ${sizeClasses.px} ${sizeClasses.variant === "compact" ? "py-1" : "py-2"} w-full cursor-pointer outline-none select-none`,
               !groupCtx?.grouped &&
-                "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)] focus-visible:ring-offset-0",
+                "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#F25C05)] focus-visible:ring-offset-0",
               className
             )}
             {...(props as React.ComponentProps<typeof AccordionPrimitive.Trigger>)}

@@ -20,7 +20,7 @@ export function StageProgressBar({ stage }: { stage: Report["stage"] }) {
           key={s.id}
           className={cn(
             "h-1.5 flex-1 rounded-full transition-colors",
-            exited ? "bg-redline/60" : i < index ? "bg-foreground/70" : i === index ? "bg-fluid-accent" : "bg-foreground/10",
+            exited ? "bg-[#E5484D]" : i < index ? "bg-success" : i === index ? "bg-warning" : "bg-[var(--track)]",
           )}
         />
       ))}

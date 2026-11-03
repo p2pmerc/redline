@@ -46,8 +46,8 @@ export function StageStepper({ current, onSelect, selected, className }: StageSt
                 transition={spring.moderate}
                 className={cn(
                   "relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground shadow-surface-2",
-                  done && "bg-foreground text-background",
-                  active && "bg-fluid-accent text-white shadow-surface-3",
+                  done && "bg-success text-white",
+                  active && "bg-[image:var(--gloss-orange)] text-white shadow-surface-3",
                   !done && !active && "bg-surface-3",
                 )}
               >

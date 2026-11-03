@@ -348,7 +348,7 @@ const InputCopy = forwardRef<HTMLDivElement, InputCopyProps>(
         )}
         style={{ fontVariationSettings: fontWeights.normal }}
       >
-        <mark className="bg-transparent text-foreground transition-colors duration-80 group-hover:bg-[color-mix(in_oklab,var(--fluid-accent,#6B97FF)_20%,transparent)] group-hover:text-foreground">
+        <mark className="bg-transparent text-foreground transition-colors duration-80 group-hover:bg-[color-mix(in_oklab,var(--fluid-accent,#F25C05)_20%,transparent)] group-hover:text-foreground">
           {value}
         </mark>
       </span>
@@ -380,7 +380,7 @@ const InputCopy = forwardRef<HTMLDivElement, InputCopyProps>(
         aria-labelledby={label ? `${buttonId} ${labelId}` : undefined}
         className={cn(
           "group flex items-center w-full cursor-pointer outline-none transition-all duration-80",
-          "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]",
+          "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#F25C05)]",
           shape.input
         )}
       >

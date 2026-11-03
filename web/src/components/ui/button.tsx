@@ -24,12 +24,12 @@ const buttonVariants = cva(
     "group relative isolate inline-flex items-center justify-center outline-none cursor-pointer select-none whitespace-nowrap",
     "transition-colors duration-80",
     "disabled:opacity-50 disabled:pointer-events-none",
-    "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]",
+    "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#F25C05)]",
   ],
   {
     variants: {
       variant: {
-        primary: "text-background",
+        primary: "text-white [text-shadow:0_1px_0_rgb(0_0_0/0.15)]",
         secondary: "text-foreground",
         tertiary: "text-foreground",
         ghost: "text-muted-foreground hover:text-foreground",
@@ -115,7 +115,7 @@ interface ButtonProps
    double up, since an outer shadow renders only outside the surface box. */
 const bgVariants: Record<string, string> = {
   primary:
-    "[--btn-bg:var(--foreground)] group-hover:[--btn-bg:color-mix(in_oklab,var(--foreground)_90%,var(--background))] group-active:[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+    "bg-[image:var(--gloss-orange)] shadow-[var(--gloss-orange-shadow)] group-hover:brightness-105 group-active:brightness-95 group-active:shadow-[0_2px_6px_-2px_rgb(242_92_5/0.5),0_0_0_1px_rgb(214_78_0/0.55)]",
   secondary:
     "[--btn-bg:var(--tint)] group-hover:[--btn-bg:var(--tint-hover)] group-active:[--btn-bg:var(--tint)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
   // The border ring is an outer 1px shadow at rest that hands off to an
@@ -134,7 +134,7 @@ const bgVariants: Record<string, string> = {
    geometric press-collapse still reacts on top. */
 const activeBgVariants: Record<string, string> = {
   primary:
-    "[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+    "bg-[image:var(--gloss-orange)] brightness-95 shadow-[0_2px_6px_-2px_rgb(242_92_5/0.5),0_0_0_1px_rgb(214_78_0/0.55)]",
   secondary:
     "[--btn-bg:var(--tint)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
   tertiary:

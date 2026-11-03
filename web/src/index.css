@@ -115,15 +115,15 @@
     opacity: 0;}}}
 
 :root {
-    --hover: rgb(0 0 0 / 0.04);
-    --active: rgb(0 0 0 / 0.07);
-    --selected: #D4D4D4;
-    --destructive-light: #FEF2F2;
+    --hover: rgb(120 90 40 / 0.06);
+    --active: rgb(120 90 40 / 0.1);
+    --selected: #EADFC8;
+    --destructive-light: #FDEEEA;
     --overlay: 0 0 0;
-    --fluid-accent: #6B97FF;
+    --fluid-accent: #F25C05;
     --focus-ring: var(--fluid-accent);
-    --tint: rgb(0 0 0 / 0.08);
-    --tint-hover: rgb(0 0 0 / 0.065);
+    --tint: rgb(120 90 40 / 0.09);
+    --tint-hover: rgb(120 90 40 / 0.14);
     --fs-display: 28px;
     --lh-display: 34px;
     --fs-display-compact: 24px;
@@ -148,15 +148,15 @@
     --lh-micro: 14px;
     --fs-micro-compact: 10px;
     --lh-micro-compact: 12px;
-    --surface-1: #FAFAFA;
-    --surface-2: #FCFCFC;
+    --surface-1: #F4F0E4;
+    --surface-2: #FBF9F3;
     --surface-3: #FFFFFF;
     --surface-4: #FFFFFF;
     --surface-5: #FFFFFF;
     --surface-6: #FFFFFF;
     --surface-7: #FFFFFF;
     --surface-8: #FFFFFF;
-    --shadow-color: rgb(0 0 0 / 0.06);
+    --shadow-color: rgb(90 65 25 / 0.08);
     --shadow-1: 0 0 0 1px var(--shadow-color);
     --shadow-2: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color);
     --shadow-3: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color), 0 3px 3px -1.5px var(--shadow-color);
@@ -166,22 +166,22 @@
     --shadow-7: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color), 0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color), 0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color), 0 48px 48px -24px var(--shadow-color);
     --shadow-8: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color), 0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color), 0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color), 0 48px 48px -24px var(--shadow-color), 0 96px 96px -48px var(--shadow-color);
     --info: #3B82F6;
-    --success: #22C55E;
-    --warning: #F59E0B;
+    --success: #1FA83C;
+    --warning: #F2A20A;
 }
 
 .dark {
     --hover: rgb(255 255 255 / 0.06);
     --active: rgb(255 255 255 / 0.1);
-    --selected: #525252;
+    --selected: #4A4338;
     --destructive-light: #450A0A;
     --overlay: 255 255 255;
     --tint: rgb(255 255 255 / 0.25);
     --tint-hover: rgb(255 255 255 / 0.2);
-    --surface-1: #171717;
-    --surface-2: #1E1E1E;
-    --surface-3: #252525;
-    --surface-4: #2C2C2C;
+    --surface-1: #1B1813;
+    --surface-2: #221F19;
+    --surface-3: #2A261F;
+    --surface-4: #312D25;
     --surface-5: #333333;
     --surface-6: #3A3A3A;
     --surface-7: #414141;
@@ -209,13 +209,13 @@
 
 @layer base {
   ::selection {
-    background-color: color-mix(in oklab, var(--fluid-accent, #6B97FF) 25%, transparent);
+    background-color: color-mix(in oklab, var(--fluid-accent, #F25C05) 25%, transparent);
     }
   .dark ::selection {
-    background-color: color-mix(in oklab, var(--fluid-accent, #6B97FF) 40%, transparent);
+    background-color: color-mix(in oklab, var(--fluid-accent, #F25C05) 40%, transparent);
     }
   :focus-visible {
-    outline: 1px solid var(--focus-ring, #6B97FF);
+    outline: 1px solid var(--focus-ring, #F25C05);
     outline-offset: 2px;
     border-radius: var(--shape-input-radius, 8px);
     }
@@ -627,39 +627,39 @@
 }
 
 :root {
-  --background: #fafafa;
-  --foreground: #171717;
+  --background: #F8F7F2;
+  --foreground: #1F1A14;
   --card: #ffffff;
   --popover: #ffffff;
-  --primary: #171717;
-  --primary-foreground: #fafafa;
-  --secondary: #f5f5f5;
-  --muted: #f5f5f5;
-  --muted-foreground: #737373;
-  --accent: #f0f0f0;
+  --primary: #F25C05;
+  --primary-foreground: #ffffff;
+  --secondary: #F4F0E4;
+  --muted: #F1ECDD;
+  --muted-foreground: #7B7367;
+  --accent: #F1ECDD;
   --destructive: #dc2626;
-  --border: #e5e5e5;
-  --input: #e5e5e5;
-  --ring: #6b97ff;
-  --redline: #e5484d;
+  --border: #E9E3D3;
+  --input: #E9E3D3;
+  --ring: #f25c05;
+  --redline: #f25c05;
 }
 
 .dark {
-  --background: #171717;
-  --foreground: #fafafa;
-  --card: #1e1e1e;
-  --popover: #252525;
-  --primary: #fafafa;
-  --primary-foreground: #171717;
-  --secondary: #252525;
-  --muted: #252525;
-  --muted-foreground: #a3a3a3;
-  --accent: #2c2c2c;
+  --background: #161410;
+  --foreground: #F8F5EC;
+  --card: #221F19;
+  --popover: #2A261F;
+  --primary: #FF7A1A;
+  --primary-foreground: #ffffff;
+  --secondary: #2A261F;
+  --muted: #2A261F;
+  --muted-foreground: #A89F8E;
+  --accent: #312D25;
   --destructive: #f87171;
-  --border: #2e2e2e;
-  --input: #2e2e2e;
-  --ring: #6b97ff;
-  --redline: #f2686d;
+  --border: #38332A;
+  --input: #38332A;
+  --ring: #ff7a1a;
+  --redline: #ff7a1a;
 }
 
 @layer base {
@@ -681,3 +681,35 @@
 .dark .hljs-number, .dark .hljs-built_in, .dark .hljs-type { color: #93c5fd; }
 .dark .hljs-function .hljs-title, .dark .hljs-title.function_ { color: #d8b4fe; }
 .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: var(--muted-foreground); }
+
+/* Warm theme: glossy orange controls, textured cream sidebar, beige bar tracks */
+:root {
+  --orange-from: #FF7A1A;
+  --orange-to: #F25C05;
+  --gloss-orange: linear-gradient(180deg, #FF8A2E 0%, #FF7A1A 45%, #F25C05 100%);
+  --gloss-orange-shadow: 0 6px 14px -4px rgb(242 92 5 / 0.45), 0 1px 0 0 rgb(255 255 255 / 0.35) inset, 0 0 0 1px rgb(214 78 0 / 0.55);
+  --track: #EFE5CC;
+}
+.dark { --track: #3A3427; }
+
+.sidebar-texture {
+  background-color: var(--surface-1);
+  background-image: repeating-linear-gradient(180deg, rgb(120 90 40 / 0.05) 0 1px, transparent 1px 3px);
+}
+.dark .sidebar-texture {
+  background-image: repeating-linear-gradient(180deg, rgb(255 255 255 / 0.03) 0 1px, transparent 1px 3px);
+}
+.nav-active {
+  background-image: var(--gloss-orange);
+  box-shadow: var(--gloss-orange-shadow);
+  color: #fff;
+}
+.section-label {
+  font-size: 10.5px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.bar-track { background: var(--track); border-radius: 9999px; overflow: hidden; }

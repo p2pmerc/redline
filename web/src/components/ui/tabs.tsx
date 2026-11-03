@@ -238,7 +238,7 @@ const Tabs = forwardRef<HTMLDivElement, TabsProps>(
             <AnimatePresence>
               {focusRect && (
                 <motion.div
-                  className={cn("absolute pointer-events-none z-20 border border-[color:var(--focus-ring,#6B97FF)]", shape.focusRing)}
+                  className={cn("absolute pointer-events-none z-20 border border-[color:var(--focus-ring,#F25C05)]", shape.focusRing)}
                   initial={false}
                   animate={{
                     left: focusRect.left - 2,

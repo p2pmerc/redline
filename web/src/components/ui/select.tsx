@@ -231,7 +231,7 @@ const triggerVariants = cva(
     "transition-all duration-80",
     "disabled:opacity-50 disabled:pointer-events-none",
     // data-pointer-focus: focus handed back after a pick with the pointer.
-    "focus-visible:not-data-[pointer-focus]:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]",
+    "focus-visible:not-data-[pointer-focus]:ring-1 focus-visible:ring-[color:var(--focus-ring,#F25C05)]",
   ],
   {
     variants: {
@@ -619,7 +619,7 @@ const SelectContent = forwardRef<HTMLDivElement, SelectContentProps>(
                     <AnimatePresence>
                       {focusRect && (
                         <motion.div
-                          className={`absolute ${shape.focusRing} pointer-events-none z-20 border border-[color:var(--focus-ring,#6B97FF)]`}
+                          className={`absolute ${shape.focusRing} pointer-events-none z-20 border border-[color:var(--focus-ring,#F25C05)]`}
                           initial={false}
                           animate={{
                             left: focusRect.left - 2,

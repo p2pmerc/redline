@@ -287,19 +287,19 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
             "transition-colors duration-80",
             // Only on :focus-visible, so a click leaves no ring. The 2px
             // offset is filled with the background to part it from the track.
-            "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#F25C05)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           )}
           style={{
             width: m.trackWidth,
             height: m.trackHeight,
-            // On: the accent (--fluid-accent, #6B97FF without the token),
+            // On: the accent (--fluid-accent, #F25C05 without the token),
             // mixing in 8% black on hover. Off: --accent, mixing in 10% of the
             // overlay color on hover (darker in light mode, lighter in dark),
             // crossfaded by transition-colors over 80ms.
             backgroundColor: checked
               ? hovered
-                ? "color-mix(in oklab, var(--fluid-accent, #6B97FF), black 8%)"
-                : "var(--fluid-accent, #6B97FF)"
+                ? "color-mix(in oklab, var(--fluid-accent, #F25C05), black 8%)"
+                : "var(--fluid-accent, #F25C05)"
               : hovered
                 ? "color-mix(in oklab, var(--accent), rgb(var(--overlay)) 10%)"
                 : "var(--accent)",
