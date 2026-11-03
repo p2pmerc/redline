@@ -17,7 +17,7 @@ export interface ChainReader {
   /** The raw escrow record for a report id, or null when the contract has none. */
   report(contractId: string, reportId: string): Promise<Record<string, any> | null>;
   config(contractId: string): Promise<Record<string, any>>;
-  /** Facts about one transaction, looked up by hash and any of the candidate signer accounts. */
+  /** Facts about one transaction (settled transfers come from the contract's own event logs), looked up by hash and any of the candidate signer accounts. */
   tx(txHash: string, signers: string[]): Promise<TxFacts>;
 }
 
@@ -48,12 +48,21 @@ export function createChainReader(rpcUrl: string = DEFAULT_TESTNET_RPC, fetchImp
         const r = body.result;
         if (!r?.transaction) continue;
         const actions = (r.transaction.actions ?? []) as Array<Record<string, any>>;
-        const transfers: ChainTransfer[] = [];
-        for (const rc of (r.receipts ?? []) as Array<Record<string, any>>) {
-          for (const a of (rc.receipt?.Action?.actions ?? []) as Array<Record<string, any>>) {
-            if (a.Transfer && rc.receiver_id) transfers.push({ to: String(rc.receiver_id), amountNear: near(String(a.Transfer.deposit)) });
+        // The contract logs a `transfer_started` event (who, how much) and, once the transfer lands, `transfer_settled`.
+        const events: Array<{ event: string; data: Record<string, any> }> = [];
+        for (const o of (r.receipts_outcome ?? []) as Array<Record<string, any>>) {
+          for (const line of (o.outcome?.logs ?? []) as string[]) {
+            if (!line.startsWith("EVENT_JSON:")) continue;
+            try {
+              const e = JSON.parse(line.slice("EVENT_JSON:".length));
+              if (e.standard === "redline") events.push({ event: String(e.event), data: e.data ?? {} });
+            } catch { /* not ours */ }
           }
         }
+        const settled = events.some((e) => e.event === "transfer_settled");
+        const transfers: ChainTransfer[] = settled
+          ? events.filter((e) => e.event === "transfer_started").map((e) => ({ to: String(e.data.to), amountNear: near(String(e.data.amount)) }))
+          : [];
         return {
           found: true,
           success: !!r.status && ("SuccessValue" in r.status || "SuccessReceiptId" in r.status),
