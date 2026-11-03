@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Files, FilePlus, Megaphone, GearSix, UserCircle, LockKey } from "@phosphor-icons/react";
+import { Files, FilePlus, Megaphone, Trophy, GearSix, UserCircle, LockKey } from "@phosphor-icons/react";
 import { CommandMenu, CommandMenuDialog, CommandMenuEmpty, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
 import { stageLabels } from "@/lib/report-stages";
 import type { Report } from "@/lib/redline-types";
@@ -21,6 +21,7 @@ export function CommandPalette({ open, onOpenChange, reports, handle }: Props) {
       { value: "page-reports", label: "Reports", icon: Files, group: "Go to", onSelect: go("/app") },
       { value: "page-new", label: "New report", icon: FilePlus, group: "Go to", onSelect: go("/app/reports/new") },
       { value: "page-disclosures", label: "Public disclosures", icon: Megaphone, group: "Go to", onSelect: go("/disclosures") },
+      { value: "page-leaderboard", label: "Researcher leaderboard", icon: Trophy, group: "Go to", onSelect: go("/leaderboard") },
       { value: "page-settings", label: "Settings", icon: GearSix, group: "Go to", onSelect: go("/app/settings") },
       ...(handle ? [{ value: "page-profile", label: "My public profile", icon: UserCircle, group: "Go to", onSelect: go(`/researchers/${handle}`) }] : []),
     ];

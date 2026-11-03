@@ -5,7 +5,8 @@ import { AuthGate } from "@/components/app/auth-gate";
 import { ReportPageSkeleton } from "@/components/feedback/skeleton";
 import { AppShell } from "@/components/app/app-shell";
 import { ProfileGate } from "@/lib/profile-context";
-import { DisclosureDetailPage, DisclosuresPage, NotFoundPage, ResearcherPage } from "@/pages/public-pages";
+import { DisclosureDetailPage, DisclosuresPage, NotFoundPage } from "@/pages/public-pages";
+import { LeaderboardPage, ResearcherPage } from "@/pages/leaderboard-pages";
 
 const DashboardPage = lazy(() => import("@/pages/app/dashboard-page").then((m) => ({ default: m.DashboardPage })));
 const NewReportPage = lazy(() => import("@/pages/app/new-report-page").then((m) => ({ default: m.NewReportPage })));
@@ -21,6 +22,7 @@ export function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/disclosures" element={<DisclosuresPage />} />
       <Route path="/disclosures/:id" element={<DisclosureDetailPage />} />
+      <Route path="/leaderboard" element={<LeaderboardPage />} />
       <Route path="/researchers/:handle" element={<ResearcherPage />} />
       <Route path="/app" element={<AuthGate />}>
         <Route element={<ProfileGate />}>

@@ -13,6 +13,12 @@ const links = [
   { href: "#faq", label: "FAQ" },
 ];
 
+/** Public pages that exist on every route, unlike the landing-page anchors above. */
+const pages = [
+  { to: "/disclosures", label: "Disclosures" },
+  { to: "/leaderboard", label: "Leaderboard" },
+];
+
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -27,6 +33,11 @@ export function SiteHeader() {
             <a key={l.href} href={l.href} className="rounded-lg px-3 py-1.5 text-subtitle text-muted-foreground transition-colors hover:bg-hover hover:text-foreground">
               {l.label}
             </a>
+          ))}
+          {pages.map((l) => (
+            <Link key={l.to} to={l.to} className="rounded-lg px-3 py-1.5 text-subtitle text-muted-foreground transition-colors hover:bg-hover hover:text-foreground">
+              {l.label}
+            </Link>
           ))}
         </nav>
         <div className="flex items-center gap-1">
@@ -53,6 +64,11 @@ export function SiteHeader() {
                 <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-subtitle hover:bg-hover">
                   {l.label}
                 </a>
+              ))}
+              {pages.map((l) => (
+                <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-subtitle hover:bg-hover">
+                  {l.label}
+                </Link>
               ))}
               <Button className="mt-2" onClick={() => navigate("/app")}>Launch app</Button>
             </div>

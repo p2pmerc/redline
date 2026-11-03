@@ -2,7 +2,7 @@ import { AccountChip } from "@/components/ui/account-chip";
 import { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Files, FilePlus, Megaphone, SignOut, List, X, GearSix, MagnifyingGlass, type Icon } from "@phosphor-icons/react";
+import { Files, FilePlus, Megaphone, Trophy, SignOut, List, X, GearSix, MagnifyingGlass, type Icon } from "@phosphor-icons/react";
 import { RedlineWordmark } from "@/components/redline-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ const navGroups: { label: string; items: NavEntry[] }[] = [
     { to: "/app", label: "Reports", icon: Files, end: true },
     { to: "/app/reports/new", label: "New report", icon: FilePlus },
   ] },
-  { label: "Public", items: [{ to: "/disclosures", label: "Public disclosures", icon: Megaphone }] },
+  { label: "Public", items: [{ to: "/disclosures", label: "Public disclosures", icon: Megaphone }, { to: "/leaderboard", label: "Leaderboard", icon: Trophy }] },
   { label: "Account", items: [{ to: "/app/settings", label: "Settings", icon: GearSix }] },
 ];
 

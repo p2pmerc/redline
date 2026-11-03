@@ -1,6 +1,6 @@
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { Link, useParams } from "react-router-dom";
-import { GithubLogo, XLogo, Globe, ArrowLeft, Megaphone, LockKey, UserCircle, FileMd, FilePdf, ShieldCheck, ArrowSquareOut, Compass, HouseLine } from "@phosphor-icons/react";
+import { ArrowLeft, Megaphone, LockKey, FileMd, FilePdf, ShieldCheck, ArrowSquareOut, Compass, HouseLine, Trophy } from "@phosphor-icons/react";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/landing/cta-section";
 import { Badge } from "@/components/ui/badge";
@@ -10,13 +10,13 @@ import { ReportEditor } from "@/components/report/report-editor";
 import { ActivityTimeline } from "@/components/report/activity-timeline";
 import { ReportCardSkeleton, ReportPageSkeleton } from "@/components/feedback/skeleton";
 import { EmptyState, ErrorState } from "@/components/feedback/empty-state";
-import { getPublicDisclosure, getPublicResearcher, listPublicDisclosures } from "@/lib/data-source";
+import { getPublicDisclosure, listPublicDisclosures } from "@/lib/data-source";
 import { useAsync } from "@/lib/use-async";
 import { exportMarkdown, exportPdf } from "@/lib/report-export";
 import { formatNear, shortDate, shortHash } from "@/lib/format";
 import { severityTone } from "@/lib/report-stages";
 
-function PublicLayout({ children }: { children: React.ReactNode }) {
+export function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="page-glow flex min-h-dvh flex-col bg-background">
       <SiteHeader />
@@ -34,6 +34,7 @@ export function DisclosuresPage() {
         <p className="eyebrow">Public record</p>
         <h1 className="flex items-center gap-2 text-[1.75rem] font-semibold tracking-tight"><Megaphone size={26} /> Public disclosures</h1>
         <p className="text-body text-muted-foreground">Reports that were unsealed after their window closed, or fixed and paid through escrow. Sealed reports are never listed.</p>
+        <Button variant="secondary" size="compact" leadingIcon={Trophy} render={<Link to="/leaderboard" />}>Researcher leaderboard</Button>
       </div>
       {error ? <ErrorState message={error.message} onRetry={reload} />
         : loading ? <div className="grid gap-4 md:grid-cols-2">{[0, 1].map((i) => <ReportCardSkeleton key={i} />)}</div>
@@ -102,70 +103,6 @@ export function NotFoundPage() {
     <PublicLayout>
       <EmptyState icon={Compass} title="Page not found" description="That address does not lead anywhere in Redline."
         action={<Button render={<Link to="/" />} leadingIcon={HouseLine}>Back home</Button>} />
-    </PublicLayout>
-  );
-}
-
-const linkIcons = { github: GithubLogo, x: XLogo, website: Globe } as const;
-
-export function ResearcherPage() {
-  const { handle = "" } = useParams();
-  const { data, error, loading, reload } = useAsync(() => getPublicResearcher(handle), [handle]);
-  return (
-    <PublicLayout>
-      {loading ? (
-        <div className="space-y-6" aria-busy="true">
-          <div className="h-40 animate-pulse card-hairline" />
-          <div className="grid gap-4 md:grid-cols-2">{[0, 1].map((i) => <ReportCardSkeleton key={i} />)}</div>
-        </div>
-      ) : error?.message.includes("No researcher") ? (
-        <EmptyState icon={UserCircle} title="No researcher with that handle" description="Check the address, or browse the public disclosures."
-          action={<Button render={<Link to="/disclosures" />} leadingIcon={Megaphone}>Public disclosures</Button>} />
-      ) : error || !data ? <ErrorState message={error?.message ?? "Not found."} onRetry={reload} />
-      : (
-        <div className="space-y-8">
-          <section className="card-hairline flex flex-col gap-5 p-6 sm:flex-row">
-            <ProfileAvatar size="xl" name={data.profile.displayName} seed={data.profile.avatarSeed} className="size-20" />
-            <div className="min-w-0 flex-1 space-y-3">
-              <div>
-                <h1 className="text-[1.5rem] font-semibold leading-tight tracking-tight">{data.profile.displayName}</h1>
-                <p className="text-body text-muted-foreground">@{data.profile.handle}{data.profile.joinedAt ? ` · joined ${shortDate(data.profile.joinedAt)}` : ""}</p>
-              </div>
-              {data.profile.bio && <p className="text-body">{data.profile.bio}</p>}
-              {data.profile.skills.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">{data.profile.skills.map((s) => <Badge key={s} color="orange">{s}</Badge>)}</div>
-              )}
-              <div className="flex flex-wrap gap-2">
-                {(Object.keys(linkIcons) as (keyof typeof linkIcons)[]).filter((k) => data.profile.links[k]).map((k) => {
-                  const Icon = linkIcons[k];
-                  return <Button key={k} variant="secondary" size="compact" leadingIcon={Icon} render={<a href={data.profile.links[k]} target="_blank" rel="noopener noreferrer nofollow" />}>{k === "x" ? "X" : k === "github" ? "GitHub" : "Website"}</Button>;
-                })}
-              </div>
-            </div>
-          </section>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              ["Public reports", String(data.stats.reports)],
-              ["Fixed and paid", String(data.stats.paid)],
-              ["Disclosed", String(data.stats.disclosed)],
-              ["Earned", formatNear(data.stats.totalPaidNear)],
-            ].map(([label, value]) => (
-              <div key={label} className="card-hairline p-4">
-                <p className="text-caption text-muted-foreground">{label}</p>
-                <p className="text-title font-semibold tabular-nums">{value}</p>
-              </div>
-            ))}
-          </div>
-
-          <section className="space-y-4">
-            <div><p className="eyebrow mb-1">Public record</p><h2 className="text-title font-semibold">Disclosed and paid reports</h2></div>
-            {data.reports.length === 0
-              ? <EmptyState icon={LockKey} title="Nothing public yet" description={`${data.profile.displayName} has not disclosed a report or been paid for a fix yet. Sealed reports are never shown.`} />
-              : <div className="grid gap-4 md:grid-cols-2">{data.reports.map((r, i) => <ReportCard key={r.id} report={r} index={i} to={`/disclosures/${r.id}`} />)}</div>}
-          </section>
-        </div>
-      )}
     </PublicLayout>
   );
 }

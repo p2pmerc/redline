@@ -238,3 +238,60 @@ export async function redeemInvite(token: string): Promise<Report> {
 }
 
 export { saveReportKey };
+
+// ---------------------------------------------------------------------- leaderboard (public, /api/v1)
+
+export interface LeaderboardEntry {
+  rank: number;
+  handle: string;
+  displayName: string;
+  avatarSeed: string;
+  totalEarnedNear: number;
+  disclosures: number;
+  paid: number;
+  highestSeverity: Severity | null;
+  lastPaidAt?: string;
+}
+
+export interface ResearcherDisclosure {
+  id: string;
+  title: string;
+  repo?: string;
+  target: string;
+  severity: Severity;
+  outcome: "fixed_and_paid" | "refunded" | "disclosed";
+  bountyNear?: number;
+  pullRequestUrl?: string;
+  fundTxHash?: string;
+  payoutTxHash?: string;
+  timestamps: { paidAt?: string; publishedAt?: string; listedAt: string };
+  links: { fundTx?: string; payoutTx?: string };
+}
+
+export interface ResearcherRecord {
+  handle: string;
+  displayName: string;
+  bio: string;
+  skills: string[];
+  links: { github?: string; x?: string; website?: string };
+  avatarSeed: string;
+  joinedAt?: string;
+  rank: number | null;
+  totalEarnedNear: number;
+  disclosures: ResearcherDisclosure[];
+  paid: number;
+  highestSeverity: Severity | null;
+}
+
+export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
+  return (await api<{ researchers: LeaderboardEntry[] }>("/v1/leaderboard?limit=100", { auth: false })).researchers;
+}
+
+export async function getResearcherRecord(handle: string): Promise<ResearcherRecord> {
+  try {
+    return await api<ResearcherRecord>(`/v1/researchers/${encodeURIComponent(handle)}`, { auth: false });
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) throw new Error("No researcher has that handle.");
+    throw e;
+  }
+}
