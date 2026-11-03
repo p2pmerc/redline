@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Files, FilePlus, Megaphone, SignOut, List, X, UserCircle, Flask, type Icon } from "@phosphor-icons/react";
+import { Files, FilePlus, Megaphone, SignOut, List, X, GearSix, type Icon } from "@phosphor-icons/react";
 import { RedlineWordmark } from "@/components/redline-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ProfileAvatar } from "@/components/ui/profile-avatar";
+import { useProfile } from "@/lib/profile-context";
 import { useSession } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +18,7 @@ const navGroups: { label: string; items: NavEntry[] }[] = [
     { to: "/app/reports/new", label: "New report", icon: FilePlus },
   ] },
   { label: "Public", items: [{ to: "/disclosures", label: "Public disclosures", icon: Megaphone }] },
+  { label: "Account", items: [{ to: "/app/settings", label: "Settings", icon: GearSix }] },
 ];
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
@@ -53,13 +56,15 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
 
 function UserBlock() {
   const { displayName, signOut } = useSession();
+  const { profile } = useProfile();
   const [pending, setPending] = useState(false);
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3 rounded-xl bg-surface-2 p-3">
-        <UserCircle size={28} weight="duotone" className="shrink-0 text-muted-foreground" />
-        <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
-          <p className="w-full truncate text-subtitle font-medium leading-tight">{displayName}</p>
+        <ProfileAvatar size="lg" name={profile?.displayName ?? displayName} seed={profile?.avatarSeed} />
+        <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+          <p className="w-full truncate text-subtitle font-medium leading-tight">{profile?.displayName ?? displayName}</p>
+          {profile && <Link to={`/researchers/${profile.handle}`} className="w-full truncate text-caption text-muted-foreground hover:text-foreground">@{profile.handle}</Link>}
         </div>
       </div>
       <Button variant="ghost" className="w-full justify-start" leadingIcon={SignOut} loading={pending}
