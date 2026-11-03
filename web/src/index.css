@@ -667,3 +667,17 @@
   body { background: var(--background); color: var(--foreground); font-size: 13px; line-height: 20px; }
   * { border-color: var(--border); }
 }
+
+/* Code block highlighting for the report editor (lowlight / highlight.js classes) */
+.typeset pre { background: var(--surface-2); border-radius: 12px; padding: 14px 16px; overflow-x: auto; box-shadow: var(--shadow-1); }
+.typeset pre code { background: none; padding: 0; font-family: var(--font-mono); font-size: 12px; }
+.hljs-comment, .hljs-quote { color: var(--muted-foreground); }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal { color: #c2410c; }
+.hljs-string, .hljs-title, .hljs-name, .hljs-attr { color: #15803d; }
+.hljs-number, .hljs-built_in, .hljs-type { color: #1d4ed8; }
+.hljs-function .hljs-title, .hljs-title.function_ { color: #7e22ce; }
+.dark .hljs-keyword, .dark .hljs-selector-tag, .dark .hljs-literal { color: #fb923c; }
+.dark .hljs-string, .dark .hljs-title, .dark .hljs-name, .dark .hljs-attr { color: #86efac; }
+.dark .hljs-number, .dark .hljs-built_in, .dark .hljs-type { color: #93c5fd; }
+.dark .hljs-function .hljs-title, .dark .hljs-title.function_ { color: #d8b4fe; }
+.ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: var(--muted-foreground); }
