@@ -50,15 +50,15 @@ export function SecuritySection() {
       </section>
       <section id="faq" className="scroll-mt-20 bg-surface-2 px-4 py-20 sm:px-6">
         <SectionHeading eyebrow="Questions" title="Things people ask first" />
-        <Reveal className="mx-auto mt-10 max-w-2xl">
+        <Reveal className="mx-auto mt-10 w-full max-w-[720px] rounded-3xl bg-background p-4 shadow-surface-1 sm:p-6">
           <div className="flex items-center gap-2 pb-3 text-caption text-muted-foreground">
             <Scales size={14} /> Coordinated disclosure, written down
           </div>
-          <Accordion type="single" collapsible defaultValue="who-reads">
+          <Accordion type="single" collapsible defaultValue="who-reads" className="w-full max-w-none">
             {faqs.map((f) => (
               <AccordionItem key={f.value} value={f.value}>
                 <AccordionTrigger>{f.q}</AccordionTrigger>
-                <AccordionContent>{f.a}</AccordionContent>
+                <AccordionContent className="text-body leading-relaxed">{f.a}</AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>

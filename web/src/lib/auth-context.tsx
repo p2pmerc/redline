@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <PrivyProvider
       appId={redlineConfig.privyAppId}
       config={{
-        loginMethods: ["email", "twitter", "github", "wallet"],
+        loginMethods: ["email", "google", "twitter", "github", "wallet"],
         appearance: { theme: "light", accentColor: "#6B97FF", showWalletLoginFirst: false },
         embeddedWallets: { ethereum: { createOnLogin: "off" } },
       }}
