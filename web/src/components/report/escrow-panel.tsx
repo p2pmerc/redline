@@ -1,3 +1,4 @@
+import { AccountChip } from "@/components/ui/account-chip";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import {
@@ -68,7 +69,7 @@ export function EscrowPanel({ report, onChange }: { report: Report; onChange: (n
 
       {report.payoutAccount && (
         <dl className="mt-5 space-y-2.5 text-body">
-          <Row icon={<HandCoins size={15} />} label="Pays to" value={<span className="text-[12px]">{report.payoutAccount}</span>} />
+          <Row icon={<HandCoins size={15} />} label="Pays to" value={<AccountChip account={report.payoutAccount} />} />
         </dl>
       )}
 

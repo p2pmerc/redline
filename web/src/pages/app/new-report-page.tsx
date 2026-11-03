@@ -118,7 +118,7 @@ export function NewReportPage() {
           <ArrowLeft size={14} /> All reports
         </Link>
         <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight">New sealed report</h1>
-        <p className="text-body text-muted-foreground">Write the report, then seal it. The text never leaves your browser unencrypted.</p>
+        <p className="text-body text-muted-foreground">Write the report, then seal it. The text is encrypted in your browser before it is sent.</p>
       </div>
 
       <section className="space-y-3 card-hairline p-5">

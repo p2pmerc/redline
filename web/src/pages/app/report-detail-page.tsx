@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ErrorBoundary } from "@/components/feedback/error-boundary";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, FileMd, FilePdf, Lock, Clock, ChatsCircle, ListChecks, FileText, Hash, Megaphone, ShieldCheck } from "@phosphor-icons/react";
 import Tabs, { TabsItem } from "@/components/ui/tabs";
@@ -35,7 +36,7 @@ export function ReportDetailPage() {
       <ErrorState message={error?.message ?? "Report not found."} onRetry={reload} />
     </div>
   );
-  return <ReportView key={data.id} initial={data} reload={reload} />;
+  return <ErrorBoundary key={data.id} onRetry={reload}><ReportView initial={data} reload={reload} /></ErrorBoundary>;
 }
 
 function BackLink() {
@@ -46,7 +47,7 @@ function BackLink() {
   );
 }
 
-function ReportView({ initial, reload }: { initial: Report; reload: () => void }) {
+export function ReportView({ initial, reload }: { initial: Report; reload: () => void }) {
   const [report, setReport] = useState(initial);
   const [tab, setTab] = useState(0);
   const [exporting, setExporting] = useState<null | "md" | "pdf">(null);
@@ -124,7 +125,7 @@ function ReportView({ initial, reload }: { initial: Report; reload: () => void }
           {tab === 0 && (
             <div>
               {report.bodyLocked
-                ? <div className="flex items-center gap-2 rounded-2xl bg-surface-2 p-6 text-body text-muted-foreground"><Lock size={16} /> Encrypted. Add the report key to read it.</div>
+                ? <div className="flex items-center gap-2 rounded-2xl bg-surface-2 p-6 text-body text-muted-foreground"><Lock size={16} /> Encrypted. Unlocking automatically with your account.</div>
                 : <ReportEditor value={report.body} editable={false} />}
             </div>
           )}

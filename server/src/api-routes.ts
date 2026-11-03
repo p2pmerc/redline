@@ -12,6 +12,7 @@ import * as ledger from "./escrow-ledger.js";
 import { LedgerError, type MergeAnswer } from "./escrow-ledger.js";
 import { isPublic, partyView, publicView, roleOf, summaryView, type PublicAuthor } from "./report-views.js";
 import { openCiphertext } from "./report-ciphertext.js";
+import { createKeyEscrow, type KeyEscrow } from "./key-escrow.js";
 import { ChainError, type ChainRelay } from "./chain-relay.js";
 import { sendInviteEmail } from "./invite-email.js";
 import { exclusive, NEAR_CHECK_DEPOSIT, runClaim, runMergeCheck, settled, stamp, verdictOf, type SettlementContext } from "./settlement.js";
@@ -29,6 +30,8 @@ export interface ApiDeps {
   accountExists?: AccountChecker;
   /** NEAR wallet sign-in (HOT Wallet and other NEP-413 wallets). */
   walletAuth?: WalletAuth;
+  /** Key vault that wraps report keys for the owner and the verified invitee. */
+  keyEscrow?: KeyEscrow;
   now?: () => Date;
 }
 
@@ -69,6 +72,8 @@ const createReportBody = z.object({
   ciphertextHex: hex(2_000_000),
   contentHash: hash64,
   sealedKeyHex: hex(4000).optional(),
+  /** The report key, over TLS, to be wrapped in the key vault at creation. */
+  reportKeyHex: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
 });
 const inviteBody = z.object({
   channel: z.enum(["email", "x", "telegram", "github"]),
@@ -123,6 +128,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     return relay;
   };
   const profiles = deps.profiles ?? new ProfileStore(null);
+  const keyEscrow = deps.keyEscrow ?? createKeyEscrow(randomUUID() + randomUUID());
   const githubLoginOf = (userId: string): string | undefined => githubLoginFromLink(profiles.get(userId)?.links.github);
   const settlement: SettlementContext = { live, relay, mergeLookup, now: () => (deps.now ?? (() => new Date()))(), githubLoginOf };
   const authorOf = (userId: string): PublicAuthor | undefined => {
@@ -133,7 +139,11 @@ export function createApiRouter(deps: ApiDeps): express.Router {
   const clock = deps.now ?? (() => new Date());
   const router = express.Router();
   const contractId = config.ledgerMode === "preview" ? "Preview ledger" : config.escrowContractId;
-  const view = (r: StoredReport, role: "researcher" | "team") => partyView(r, role, config.ledgerMode, contractId);
+  const namesOf = (r: StoredReport) => {
+    const ident = (id?: string) => { const p = id ? profiles.get(id) : undefined; return p ? { handle: p.handle, displayName: p.displayName } : undefined; };
+    return { researcher: ident(r.researcherId), team: ident(r.teamId) };
+  };
+  const view = (r: StoredReport, role: "researcher" | "team") => partyView(r, role, config.ledgerMode, contractId, namesOf(r));
 
   const handler = (fn: (req: Request, res: Response) => Promise<void> | void) => (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res)).catch(next);
@@ -247,7 +257,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
       .map((r) => ({ r, role: roleOf(r, userId) }))
       .filter((x): x is { r: StoredReport; role: "researcher" | "team" } => !!x.role)
       .sort((a, b) => b.r.updatedAt.localeCompare(a.r.updatedAt))
-      .map(({ r, role }) => summaryView(r, role, config.ledgerMode, contractId));
+      .map(({ r, role }) => summaryView(r, role, config.ledgerMode, contractId, namesOf(r)));
     res.json({ reports: items });
   });
 
@@ -271,6 +281,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
       contentHash: input.contentHash.toLowerCase(),
       ciphertextHex: input.ciphertextHex.toLowerCase(),
       sealedKeyHex: input.sealedKeyHex?.toLowerCase(),
+      ...(input.reportKeyHex && openCiphertext(input.ciphertextHex, input.reportKeyHex) !== undefined ? { escrowedKeyHex: keyEscrow.wrap(input.reportKeyHex.toLowerCase()) } : {}),
       status: "registered",
       invites: [],
       messages: [],
@@ -357,6 +368,28 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     res.status(201).json(view(report, role));
   }));
 
+  /** Escrow the report key for the owner (no-op when already held). The key must really open the report. */
+  router.post("/reports/:id/key", (req, res) => {
+    const { report, role } = party(req);
+    if (role !== "researcher") throw new HttpError(403, "Only the researcher can escrow the report key.");
+    const { reportKeyHex } = z.object({ reportKeyHex: z.string().regex(/^[0-9a-fA-F]{64}$/) }).parse(req.body);
+    if (openCiphertext(report.ciphertextHex, reportKeyHex) === undefined) throw new HttpError(400, "That key does not open this report.");
+    if (!report.escrowedKeyHex || keyEscrow.unwrap(report.escrowedKeyHex) === undefined) {
+      report.escrowedKeyHex = keyEscrow.wrap(reportKeyHex.toLowerCase());
+      store.save(report);
+    }
+    res.json({ ok: true });
+  });
+
+  /** Release the report key to the signed-in owner or the verified, redeemed invitee, on any device. */
+  router.get("/reports/:id/key", (req, res) => {
+    const { report } = party(req);
+    const keyHex = report.escrowedKeyHex ? keyEscrow.unwrap(report.escrowedKeyHex) : undefined;
+    if (!keyHex) throw new HttpError(404, "The key is not escrowed yet.");
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ reportKeyHex: keyHex });
+  });
+
   /** Register this browser's device public key so a party who holds the report key can escrow a wrap for you. */
   router.post("/reports/:id/device-key", (req, res) => {
     const { report, role } = party(req);
@@ -377,7 +410,8 @@ export function createApiRouter(deps: ApiDeps): express.Router {
   router.get("/reports/:id/device-keys", (req, res) => {
     const { report } = party(req);
     const partyIds = new Set([report.researcherId, ...(report.teamId ? [report.teamId] : [])]);
-    const keys = (report.deviceKeys ?? []).filter((d) => partyIds.has(d.userId));
+    const wrapped = new Set((report.keyWraps ?? []).map((w) => `${w.userId}:${w.devicePubHex}`));
+    const keys = (report.deviceKeys ?? []).filter((d) => partyIds.has(d.userId)).map((d) => ({ ...d, hasWrap: wrapped.has(`${d.userId}:${d.devicePubHex}`) }));
     res.json({ keys });
   });
 

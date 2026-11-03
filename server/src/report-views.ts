@@ -30,7 +30,17 @@ export function stageOf(report: StoredReport): Stage {
 }
 
 /** What a party to the report may see. Bodies and messages stay ciphertext. */
-export function partyView(report: StoredReport, role: Role, ledgerMode: string, contractId: string) {
+export interface Ident { handle?: string; displayName?: string }
+const GENERIC_NAMES = new Set(["signed in", "team", "researcher", ""]);
+const realName = (n?: string): string | undefined => (n && !GENERIC_NAMES.has(n.trim().toLowerCase()) ? n.trim() : undefined);
+/** The label to show for a person: their @handle when they have a profile, else a real display name. */
+const labelOf = (id: Ident | undefined, fallback?: string): string | undefined =>
+  id?.handle ? `@${id.handle}` : realName(id?.displayName) ?? realName(fallback);
+
+export function partyView(report: StoredReport, role: Role, ledgerMode: string, contractId: string, names: { researcher?: Ident; team?: Ident } = {}) {
+  const researcherLabel = labelOf(names.researcher, report.researcherName) ?? "Researcher";
+  const inviteLabel = report.invites.find((i) => i.status === "redeemed")?.handle;
+  const teamLabel = report.teamId ? labelOf(names.team, report.teamName) ?? inviteLabel ?? "Security team" : undefined;
   return {
     id: report.id,
     title: report.title,
@@ -41,7 +51,10 @@ export function partyView(report: StoredReport, role: Role, ledgerMode: string, 
     role,
     researcherSeed: avatarSeed(report.researcherId),
     teamSeed: report.teamId ? avatarSeed(report.teamId) : undefined,
-    counterparty: role === "researcher" ? report.teamName ?? "Not joined yet" : report.researcherName,
+    counterparty: role === "researcher" ? teamLabel ?? "Not joined yet" : researcherLabel,
+    researcherHandle: names.researcher?.handle,
+    researcherName: researcherLabel,
+    teamName: teamLabel,
     createdAt: report.createdAt,
     updatedAt: report.updatedAt,
     disclosureDeadline: report.disclosureDeadline,
@@ -59,15 +72,15 @@ export function partyView(report: StoredReport, role: Role, ledgerMode: string, 
       ...(role === "researcher" && i.status !== "revoked" ? { token: i.token } : {}),
       ...(role === "researcher" && i.delivery ? { delivery: { state: i.delivery.state, at: i.delivery.at, error: i.delivery.error } } : {}),
     })),
-    messages: report.messages.map((m) => ({ id: m.id, from: m.role, author: m.authorName, ciphertextHex: m.ciphertextHex, hash: m.hash, at: m.at })),
+    messages: report.messages.map((m) => ({ id: m.id, from: m.role, author: (m.role === "researcher" ? researcherLabel : teamLabel) ?? m.authorName, ciphertextHex: m.ciphertextHex, hash: m.hash, at: m.at })),
     timeline: report.timeline,
     published: report.published ? { at: report.published.at, evidenceHash: report.published.evidenceHash } : undefined,
     ledgerMode,
   };
 }
 
-export function summaryView(report: StoredReport, role: Role, ledgerMode: string, contractId: string) {
-  const { ciphertextHex: _c, messages: _m, ...rest } = partyView(report, role, ledgerMode, contractId);
+export function summaryView(report: StoredReport, role: Role, ledgerMode: string, contractId: string, names: { researcher?: Ident; team?: Ident } = {}) {
+  const { ciphertextHex: _c, messages: _m, ...rest } = partyView(report, role, ledgerMode, contractId, names);
   return { ...rest, messages: [] as never[] };
 }
 

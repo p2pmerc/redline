@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/feedback/toast-provider";
 import { AuthProvider } from "@/lib/auth-context";
 import { App } from "./App";
+import { ErrorBoundary } from "@/components/feedback/error-boundary";
 import "./index.css";
 
 createRoot(document.getElementById("root")!).render(
@@ -15,7 +16,7 @@ createRoot(document.getElementById("root")!).render(
         <TooltipProvider>
           <ToastProvider>
             <AuthProvider>
-              <App />
+              <ErrorBoundary><App /></ErrorBoundary>
             </AuthProvider>
           </ToastProvider>
         </TooltipProvider>

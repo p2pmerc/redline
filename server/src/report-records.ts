@@ -101,6 +101,8 @@ export interface StoredReport {
   ciphertextHex: string;
   /** Report key sealed to the enclave public key. Opaque to the server. */
   sealedKeyHex?: string;
+  /** Report key wrapped under the service key vault (see key-escrow.ts). Released only to parties. */
+  escrowedKeyHex?: string;
   status: LedgerStatus;
   /** NEAR account bound on chain to receive the reward. Required before the team can fund. */
   payoutAccount?: string;

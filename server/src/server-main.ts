@@ -1,9 +1,11 @@
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import express from "express";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { createApiRouter } from "./api-routes.js";
+import { createKeyEscrow } from "./key-escrow.js";
 import { createMergeLookup } from "./github-merge-lookup.js";
 import { createPrivyVerifier } from "./privy-token-verifier.js";
 import { ReportStore } from "./report-store.js";
@@ -20,7 +22,7 @@ export function createApp(deps: ApiDeps): express.Express {
   const app = express();
   app.set("trust proxy", 1);
   app.disable("x-powered-by");
-  app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false, crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" } }));
   app.use("/api", rateLimit({ windowMs: 60_000, limit: 240, standardHeaders: true, legacyHeaders: false, message: { error: "Too many requests. Slow down for a minute." } }));
   app.use("/api", express.json({ limit: "3mb" }));
   app.use("/api", createApiRouter(deps));
@@ -38,7 +40,8 @@ export function startServer(config: ServerConfig = loadConfig()) {
   const mergeLookup = createMergeLookup(undefined, config.githubToken);
   const relay = config.ledgerMode === "testnet" ? relayFromEnv(process.env, config.escrowContractId) : undefined;
   const walletAuth = createWalletAuth({ secret: process.env.SESSION_SECRET, keyBelongs: createKeyChecker(process.env.NEAR_RPC_URL || undefined) });
-  const app = createApp({ config, store, profiles, walletAuth, verifyToken: combineVerifiers(walletAuth, createPrivyVerifier(config.privyAppId)), mergeLookup, relay, accountExists: createAccountChecker(process.env.NEAR_RPC_URL || undefined) });
+  const keyEscrow = createKeyEscrow(process.env.KEY_ESCROW_SECRET || process.env.SESSION_SECRET || randomBytes(32).toString("hex"));
+  const app = createApp({ config, store, profiles, walletAuth, keyEscrow, verifyToken: combineVerifiers(walletAuth, createPrivyVerifier(config.privyAppId)), mergeLookup, relay, accountExists: createAccountChecker(process.env.NEAR_RPC_URL || undefined) });
   const githubLoginOf = (userId: string): string | undefined => githubLoginFromLink(profiles.get(userId)?.links.github);
   if (config.ledgerMode === "testnet" && relay && process.env.PAYOUT_AUTOMATION !== "off") {
     const pollMs = Number(process.env.PAYOUT_POLL_MS) || (config.githubToken ? 65_000 : 300_000);

@@ -362,3 +362,31 @@ describe("payout account", () => {
     expect((await call("user-carol", "POST", `/reports/${id}/payout-account`)).status).toBe(409); // locked once funded
   });
 });
+
+describe("report key escrow", () => {
+  it("escrows at creation and releases only to the owner and the redeemed invitee", async () => {
+    if (!(await call("user-alice", "GET", "/profile")).json.profile) await call("user-alice", "PUT", "/profile", PROFILE);
+    const sealed = seal("escrowed body");
+    const created = await call("user-alice", "POST", "/reports", {
+      title: "Escrow at creation", severity: "high", repo: "acme/widgets", disclosureDays: 30, summary: "s",
+      ciphertextHex: sealed.ciphertextHex, contentHash: sealed.contentHash, reportKeyHex: sealed.keyHex,
+    });
+    const id = created.json.id as string;
+    expect(JSON.stringify(created.json)).not.toContain(sealed.keyHex);
+    expect((await call("user-alice", "GET", `/reports/${id}/key`)).json.reportKeyHex).toBe(sealed.keyHex);
+    expect((await call("user-bob", "GET", `/reports/${id}/key`)).status).toBe(404); // not yet a party
+    await joinTeam(id);
+    expect((await call("user-bob", "GET", `/reports/${id}/key`)).json.reportKeyHex).toBe(sealed.keyHex);
+    expect((await call("user-eve", "GET", `/reports/${id}/key`)).status).toBe(404);
+    expect((await call("user-bob", "POST", `/reports/${id}/key`, { reportKeyHex: sealed.keyHex })).status).toBe(403);
+  });
+
+  it("backfills only a key that really opens the report", async () => {
+    const { created, sealed } = await newReport();
+    const id = created.json.id as string;
+    expect((await call("user-alice", "GET", `/reports/${id}/key`)).status).toBe(404);
+    expect((await call("user-alice", "POST", `/reports/${id}/key`, { reportKeyHex: "ab".repeat(32) })).status).toBe(400);
+    expect((await call("user-alice", "POST", `/reports/${id}/key`, { reportKeyHex: sealed.keyHex })).status).toBe(200);
+    expect((await call("user-alice", "GET", `/reports/${id}/key`)).json.reportKeyHex).toBe(sealed.keyHex);
+  });
+});

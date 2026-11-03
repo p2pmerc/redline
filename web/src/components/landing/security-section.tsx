@@ -3,7 +3,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { Reveal, SectionHeading } from "./reveal";
 
 const guarantees = [
-  { icon: Key, title: "Keys never leave your browser", body: "The report key is generated locally and sealed to the enclave's public key. Redline servers only ever store ciphertext." },
+  { icon: Key, title: "Sealed, on any device", body: "The report key is generated in your browser and held wrapped. It is released only to you and verified invitees, so signing in on any device is enough. Redline stores the report only as ciphertext." },
   { icon: Cpu, title: "Identity checked inside a TEE", body: "A verified Privy session is matched to the invite inside an Intel TDX enclave with remote attestation, so the match cannot be faked by an operator." },
   { icon: Hash, title: "A tamper-evident record", body: "Report hash, invites, message hashes and agreements are logged on the NEAR contract. Nobody can rewrite the history after the fact." },
   { icon: ShieldWarning, title: "Fail-closed payouts", body: "If GitHub cannot be reached or the answer is unclear, the contract neither pays nor refunds early. It waits and checks again." },
@@ -24,7 +24,7 @@ export function SecuritySection() {
         <SectionHeading
           eyebrow="Security model"
           title="Trust the math, not the platform"
-          description="Redline is built so that its own operators cannot read your report or move your money."
+          description="Redline is built so that reports stay sealed and payouts follow the contract, not an operator."
         />
         <div className="mx-auto mt-12 grid max-w-6xl gap-3 md:grid-cols-2">
           {guarantees.map((g, i) => (

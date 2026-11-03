@@ -24,7 +24,7 @@ interface ProfileAvatarProps {
 export function ProfileAvatar({ seed, name, size = "md", className }: ProfileAvatarProps) {
   const px = sizes[size];
   const [state, setState] = useState<"loading" | "ready" | "failed">(seed ? "loading" : "failed");
-  useEffect(() => setState(seed ? "loading" : "failed"), [seed]);
+  useEffect(() => { setState(seed ? "loading" : "failed"); }, [seed]);
   const letter = name.trim().charAt(0).toUpperCase();
 
   return (

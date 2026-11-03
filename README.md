@@ -29,7 +29,7 @@ Status: testnet only. The web app and API run today in **preview mode**. The con
 Without a deployed contract and enclave (`LEDGER_MODE=preview`, empty `VITE_ENCLAVE_PUBLIC_KEY`):
 
 - The server plays the chain: it runs the same escrow state machine, and no funds move. Ledger references are marked `preview:`.
-- The report key stays in the researcher's browser and in invite link fragments (`#k=`), never on the server. An invite link is therefore a bearer link. The enclave's identity binding applies once the enclave is deployed.
+- The report key is generated in the researcher's browser and escrowed at creation: the server wraps it (AES-256-GCM, `KEY_ESCROW_SECRET`) and releases it only to the signed-in owner and the verified, redeemed invitee, on any device (`GET /api/reports/:id/key`). This is service-held, not zero-knowledge; the enclave-sealed copy (`sealedKeyHex`) is the path to removing the service from the trust base. Invite links may still carry the key in the `#k=` fragment.
 - GitHub merge status is read from the public API by the server.
 
 ## Run locally

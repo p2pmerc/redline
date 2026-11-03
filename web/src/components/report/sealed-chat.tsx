@@ -26,7 +26,9 @@ export function SealedChat({ report, onChange }: SealedChatProps) {
   const toast = useToast();
   const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => endRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), [messages.length]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [messages.length]);
 
   async function send(text: string) {
     if (!text.trim() || sending) return;
@@ -45,7 +47,7 @@ export function SealedChat({ report, onChange }: SealedChatProps) {
     <div className="flex h-[520px] flex-col card-hairline">
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
         <LockKey size={16} className="text-muted-foreground" />
-        <p className="text-subtitle font-medium">Sealed chat with {counterparty}</p>
+        <p className="text-subtitle font-medium">Sealed chat with {counterparty && !/^signed in$/i.test(counterparty.trim()) ? counterparty : "your counterpart"}</p>
         <span className="ml-auto inline-flex items-center gap-1 text-caption text-muted-foreground"><Hash size={12} /> encrypted</span>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -76,7 +78,7 @@ export function SealedChat({ report, onChange }: SealedChatProps) {
           value={draft}
           onValueChange={setDraft}
           onSend={(text) => void send(text)}
-          placeholder={report.bodyLocked ? "Add the report key to chat" : locked ? "Chat opens after the invite is redeemed" : "Write a message. It is encrypted first."}
+          placeholder={report.bodyLocked ? "Unlocking the chat. This happens automatically." : locked ? "Chat opens after the invite is redeemed" : "Write a message. It is encrypted first."}
           disabled={locked || sending}
           status={sending ? "streaming" : "idle"}
           minRows={1}
