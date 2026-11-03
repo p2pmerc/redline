@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Push main to zer0 (origin) and p2pmerc. Never force-pushes.
+# Push main to origin and p2pmerc. Never force-pushes.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 branch="${1:-main}"
-echo "Pushing $branch → origin (zer0plugyut-afk/redline)"
+echo "Pushing $branch → origin "
 GH_CONFIG_DIR=/workspace/.gh-zer0 git push origin "$branch"
 echo "Pushing $branch → p2pmerc (p2pmerc/redline)"
 GH_CONFIG_DIR=/workspace/.gh-p2pmerch git push p2pmerc "$branch"

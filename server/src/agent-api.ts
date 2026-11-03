@@ -325,7 +325,7 @@ export function describeApi(origin: string) {
     version: "v1",
     readOnly: true,
     auth: "None for public data. GET /reports/:id accepts an optional Authorization: Bearer token of a party to the report.",
-    docs: "https://github.com/zer0plugyut-afk/redline#for-ai-agents",
+    docs: "https://github.com/p2pmerc/redline#for-ai-agents",
     endpoints: [
       { method: "GET", path: `${origin}/api/v1/disclosures`, query: "status=paid|published, limit (max 100), offset", about: "Published and fixed-and-paid reports with bounty, PR and transaction hashes." },
       { method: "GET", path: `${origin}/api/v1/disclosures/{id}`, about: "Full public detail: published body (when unsealed), proof fields, enclave info, public timeline." },
@@ -366,7 +366,7 @@ Agents get a read-only, unauthenticated JSON API. It never returns report plaint
 - [Manifest](${origin}/.well-known/redline.json)
 
 ## Optional
-- [Source and docs](https://github.com/zer0plugyut-afk/redline#for-ai-agents)
+- [Source and docs](https://github.com/p2pmerc/redline#for-ai-agents)
 - [Public disclosures page](${origin}/disclosures)
 `;
 }
