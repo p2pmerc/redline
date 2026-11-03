@@ -23,7 +23,9 @@ export function stageOf(report: StoredReport): Stage {
     case "terms_proposed": return "negotiating";
     default:
       if (report.teamId) return "negotiating";
-      return report.invites.length > 0 ? "invited" : "sealed";
+      // Revoked/expired invites must not keep the report stuck on "Invited".
+      const openInvite = report.invites.some((i) => i.status === "pending" || i.status === "redeemed");
+      return openInvite ? "invited" : "sealed";
   }
 }
 
@@ -54,6 +56,7 @@ export function partyView(report: StoredReport, role: Role, ledgerMode: string, 
     invites: report.invites.map((i) => ({
       id: i.id, channel: i.channel, handle: i.handle, status: i.status,
       ...(role === "researcher" && i.status !== "revoked" ? { token: i.token } : {}),
+      ...(role === "researcher" && i.delivery ? { delivery: { state: i.delivery.state, at: i.delivery.at, error: i.delivery.error } } : {}),
     })),
     messages: report.messages.map((m) => ({ id: m.id, from: m.role, author: m.authorName, ciphertextHex: m.ciphertextHex, hash: m.hash, at: m.at })),
     timeline: report.timeline,

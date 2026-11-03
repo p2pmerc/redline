@@ -84,6 +84,11 @@ export interface InviteRecipient {
   status: "pending" | "redeemed" | "expired" | "revoked";
   /** Only the researcher receives it. Part of the invite link. */
   token?: string;
+  delivery?: {
+    state: "idle" | "sending" | "sent" | "failed" | "ready";
+    at?: string;
+    error?: string;
+  };
 }
 
 export interface Report {

@@ -11,6 +11,12 @@ export interface ServerConfig {
   enclavePublicKey: string;
   githubToken?: string;
   allowedOrigin?: string;
+  /** AgentMail API key — Railway only. Never log or return it. */
+  agentMailApiKey?: string;
+  /** Dedicated Redline sender inbox id (email address). */
+  agentMailInboxId?: string;
+  /** Public app origin used in invite emails and absolute links. */
+  appOrigin: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -25,5 +31,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     enclavePublicKey: env.ENCLAVE_PUBLIC_KEY ?? "",
     githubToken: env.GITHUB_TOKEN || undefined,
     allowedOrigin: env.ALLOWED_ORIGIN || undefined,
+    agentMailApiKey: env.AGENTMAIL_API_KEY || undefined,
+    agentMailInboxId: env.AGENTMAIL_INBOX_ID || undefined,
+    appOrigin: (env.APP_ORIGIN || env.ALLOWED_ORIGIN || "https://redline-app-production-b0e6.up.railway.app").replace(/\/$/, ""),
   };
 }

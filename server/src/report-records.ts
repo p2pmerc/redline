@@ -24,6 +24,14 @@ export interface InviteRecord {
   handle: string;
   status: "pending" | "redeemed" | "expired" | "revoked";
   createdAt: string;
+  /** Outbound delivery for email/X/Telegram. Never log the #key fragment. */
+  delivery?: {
+    state: "idle" | "sending" | "sent" | "failed" | "ready";
+    at?: string;
+    error?: string;
+    /** Message id from AgentMail when email was sent. */
+    messageId?: string;
+  };
 }
 
 export interface MessageRecord {
@@ -61,6 +69,20 @@ export interface PublishedRecord {
   evidenceHash: string;
 }
 
+/** Ciphertext-only: report key sealed to a browser device public key. Server cannot open these. */
+export interface KeyWrapRecord {
+  userId: string;
+  devicePubHex: string;
+  wrapHex: string;
+  at: string;
+}
+
+export interface DeviceKeyRecord {
+  userId: string;
+  devicePubHex: string;
+  at: string;
+}
+
 export interface StoredReport {
   id: string;
   researcherId: string;
@@ -86,4 +108,8 @@ export interface StoredReport {
   messages: MessageRecord[];
   timeline: TimelineEntry[];
   published?: PublishedRecord;
+  /** Registered device public keys (P-256 raw hex) for parties, so a browser that holds the report key can escrow wraps. */
+  deviceKeys?: DeviceKeyRecord[];
+  /** Report-key wraps. Ciphertext only. */
+  keyWraps?: KeyWrapRecord[];
 }

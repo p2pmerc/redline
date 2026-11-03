@@ -20,6 +20,38 @@ const channelMeta: Record<InviteRecipient["channel"], { label: string; icon: Ico
 
 const statusColor = { pending: "amber", redeemed: "green", expired: "gray", revoked: "red" } as const;
 
+const deliveryLabel: Record<NonNullable<InviteRecipient["delivery"]>["state"], string> = {
+  idle: "Not sent",
+  sending: "Sending…",
+  sent: "Email sent",
+  failed: "Send failed",
+  ready: "Ready to DM",
+};
+
+const deliveryColor: Record<NonNullable<InviteRecipient["delivery"]>["state"], "gray" | "amber" | "green" | "red"> = {
+  idle: "gray",
+  sending: "amber",
+  sent: "green",
+  failed: "red",
+  ready: "amber",
+};
+
+function stripAt(handle: string) {
+  return handle.trim().replace(/^@/, "");
+}
+
+function dmUrl(invite: InviteRecipient, url: string): string | null {
+  const h = stripAt(invite.handle);
+  if (!h) return null;
+  if (invite.channel === "x") {
+    return `https://x.com/messages/compose?text=${encodeURIComponent(`@${h} You're invited to a sealed Redline report. Open this private link (do not forward): ${url}`)}`;
+  }
+  if (invite.channel === "telegram") {
+    return `https://t.me/${encodeURIComponent(h)}?text=${encodeURIComponent(`You're invited to a sealed Redline report. Open this private link (do not forward):\n${url}`)}`;
+  }
+  return null;
+}
+
 export function InvitePanel({ report, onChange }: { report: Report; onChange: (next: Report) => void }) {
   const invites = report.invites;
   const canInvite = report.role === "researcher";
@@ -36,11 +68,20 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
     if (!value) return;
     setSending(true);
     try {
-      const next = await toast.promise(createInvite(report.id, channel, value), {
-        pending: "Creating invite…", success: "Invite link ready", error: "Could not create the invite",
+      const key = getReportKey(report.id);
+      const next = await toast.promise(createInvite(report.id, channel, value, key), {
+        pending: channel === "email" ? "Sending invite email…" : "Creating invite…",
+        success: channel === "email" ? "Invite email sent (or queued)" : "Invite ready — open Send as DM",
+        error: "Could not create the invite",
       });
       onChange(next);
       setHandle("");
+      const created = next.invites[next.invites.length - 1];
+      if (created && (created.channel === "x" || created.channel === "telegram") && created.token) {
+        const url = inviteLink(created.token, key);
+        const open = dmUrl(created, url);
+        if (open) window.open(open, "_blank", "noopener,noreferrer");
+      }
     } catch {
       /* toast shown */
     } finally {
@@ -78,6 +119,18 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
     }
   }
 
+  function openDm(invite: InviteRecipient) {
+    if (!invite.token) return;
+    const url = inviteLink(invite.token, getReportKey(report.id));
+    const open = dmUrl(invite, url);
+    if (open) window.open(open, "_blank", "noopener,noreferrer");
+  }
+
+  const submitLabel =
+    channel === "email" ? (sending ? "Sending…" : "Send invite email")
+      : channel === "x" || channel === "telegram" ? (sending ? "Creating…" : "Create & open DM")
+        : (sending ? "Creating…" : "Create invite link");
+
   return (
     <section className="card-hairline p-5" aria-label="Invites">
       <h2 className="mb-4 flex items-center gap-2 text-subtitle font-semibold"><UserPlus size={16} /> Invited people</h2>
@@ -90,6 +143,8 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
             const status: string = invite.status;
             const showCopy = status === "pending" && !!invite.token;
             const showWithdraw = canInvite && status !== "revoked";
+            const showDm = showCopy && (invite.channel === "x" || invite.channel === "telegram");
+            const delivery = invite.delivery;
             return (
               <li key={invite.id} className="space-y-2 rounded-xl px-2 py-2.5 transition-colors hover:bg-hover">
                 <div className="flex items-start gap-3">
@@ -97,14 +152,30 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
                   <div className="min-w-0 flex-1">
                     <p className="break-all text-subtitle font-medium leading-snug">{invite.handle}</p>
                     <p className="text-caption text-muted-foreground">{meta.label}</p>
+                    {delivery && canInvite && (
+                      <p className="mt-1 text-caption text-muted-foreground">
+                        {deliveryLabel[delivery.state]}
+                        {delivery.state === "failed" && delivery.error ? ` — ${delivery.error}` : ""}
+                      </p>
+                    )}
                   </div>
-                  <Badge color={statusColor[invite.status]} className="mt-0.5 capitalize">{invite.status}</Badge>
+                  <div className="mt-0.5 flex flex-col items-end gap-1">
+                    <Badge color={statusColor[invite.status]} className="capitalize">{invite.status}</Badge>
+                    {delivery && canInvite && (
+                      <Badge color={deliveryColor[delivery.state]} className="capitalize">{deliveryLabel[delivery.state]}</Badge>
+                    )}
+                  </div>
                 </div>
-                {(showCopy || showWithdraw) && (
+                {(showCopy || showWithdraw || showDm) && (
                   <div className="flex flex-wrap items-center gap-2 pl-11">
                     {showCopy && (
                       <Button variant="secondary" size="compact" leadingIcon={copied === invite.id ? Check : LinkSimple} onClick={() => void copy(invite)}>
                         {copied === invite.id ? "Copied" : "Copy link"}
+                      </Button>
+                    )}
+                    {showDm && (
+                      <Button variant="secondary" size="compact" leadingIcon={invite.channel === "x" ? XLogo : TelegramLogo} onClick={() => openDm(invite)}>
+                        Send as DM
                       </Button>
                     )}
                     {showWithdraw && (
@@ -137,9 +208,15 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
             <InputField index={0} label="Recipient" placeholder={channelMeta[channel].placeholder} value={handle} onChange={setHandle} disabled={sending} />
           </InputGroup>
           <Button type="submit" className="w-full" loading={sending} leadingIcon={PaperPlaneTilt} disabled={!handle.trim()}>
-            {sending ? "Creating…" : "Create invite link"}
+            {submitLabel}
           </Button>
-          <p className="text-caption text-muted-foreground">Share the link privately. It carries the report key after the # sign, which browsers never send to a server. Anyone with the link can join, so send it only to the person you mean.</p>
+          <p className="text-caption text-muted-foreground">
+            {channel === "email"
+              ? "We email them a branded invite. The report key rides in the # fragment of the link and is never logged."
+              : channel === "x" || channel === "telegram"
+                ? "We create the private invite link, then open a one-click DM composer with it. The #key fragment stays in your browser."
+                : "Share the link privately. It carries the report key after the # sign, which browsers never send to a server."}
+          </p>
         </form>
       )}
     </section>
