@@ -114,6 +114,4 @@ export interface Report {
   bodyLocked?: boolean;
   publishedAt?: string;
   evidenceHash?: string;
-  /** True for the built-in sample reports. */
-  sample?: boolean;
 }

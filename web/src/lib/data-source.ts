@@ -1,8 +1,8 @@
-import { api, ApiError, isDemoSession } from "./api-client";
+import { api, ApiError } from "./api-client";
+import { redlineConfig } from "./redline-config";
 import type { EscrowState, InviteRecipient, NegotiationMessage, ProposedTerms, Report, ReportRole, ReportStage, Severity, TimelineEvent } from "./redline-types";
 import { getReportKey, saveReportKey, takeInviteKey } from "./report-key-vault";
 import { encryptWithKey, openReportBody, sealReportBody } from "./report-encryption";
-import { findSampleReport, sampleReports } from "./sample-reports";
 
 /** Shape the server sends for a report the caller is a party to. Bodies and messages are ciphertext. */
 interface PartyView {
@@ -49,8 +49,7 @@ interface PublicView {
   timeline: TimelineEvent[];
 }
 
-const demoBlocked = () => new ApiError("Sample data is read-only. Sign in to do this for real.", 403);
-const guard = () => { if (isDemoSession()) throw demoBlocked(); };
+const guard = () => {};
 
 async function toReport(view: PartyView): Promise<Report> {
   const key = getReportKey(view.id);
@@ -89,39 +88,26 @@ function fromPublic(view: PublicView): Report {
     disclosureDeadline: view.publishedAt, rewardNear: view.rewardNear, summary: view.summary, body: view.body, invites: [], messages: [],
     timeline: view.timeline, contentHash: view.contentHash, publishedAt: view.publishedAt, evidenceHash: view.evidenceHash,
     escrow: view.outcome === "fixed_and_paid" && view.rewardNear
-      ? { amountNear: view.rewardNear, funded: false, expiresAt: view.publishedAt, contractId: "Preview ledger", mergeCheck: "merged", mode: "preview" } : undefined,
+      ? { amountNear: view.rewardNear, funded: false, expiresAt: view.publishedAt, contractId: redlineConfig.escrowContractId, mergeCheck: "merged", mode: "testnet" } : undefined,
   };
 }
 
-const latency = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const samples = (list: Report[]) => list.map((r) => ({ ...r, sample: true }));
-
 export async function listReports(): Promise<Report[]> {
-  if (isDemoSession()) { await latency(600); return samples(sampleReports); }
   const { reports } = await api<{ reports: PartyView[] }>("/reports");
   return Promise.all(reports.map((r) => toReport(r)));
 }
 
 export async function getReport(id: string): Promise<Report> {
-  if (isDemoSession()) {
-    await latency(450);
-    const sample = findSampleReport(id);
-    if (!sample) throw new ApiError("This report does not exist, or you do not have access to it.", 404);
-    return { ...sample, sample: true };
-  }
   return toReport(await api<PartyView>(`/reports/${encodeURIComponent(id)}`));
 }
 
-/** Reports that were unsealed publicly by their researcher, with evidence. Falls back to samples while none exist. */
+/** Reports that were unsealed publicly by their researcher, with evidence.  */
 export async function listPublicDisclosures(): Promise<Report[]> {
   const { disclosures } = await api<{ disclosures: PublicView[] }>("/public/disclosures", { auth: false });
-  if (disclosures.length) return disclosures.map(fromPublic);
-  return samples(sampleReports.filter((r) => r.stage === "published"));
+  return disclosures.map(fromPublic);
 }
 
 export async function getPublicDisclosure(id: string): Promise<Report> {
-  const sample = findSampleReport(id);
-  if (sample && sample.stage === "published") return { ...sample, sample: true };
   return fromPublic(await api<PublicView>(`/public/disclosures/${encodeURIComponent(id)}`, { auth: false }));
 }
 

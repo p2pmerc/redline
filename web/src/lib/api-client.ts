@@ -9,14 +9,12 @@ export class ApiError extends Error {
 interface AuthBridge {
   getToken: () => Promise<string | null>;
   displayName: string;
-  demo: boolean;
 }
 
 let bridge: AuthBridge | null = null;
 
 /** Set by the session provider so data calls can attach the signed-in user's token. */
 export const setAuthBridge = (next: AuthBridge | null) => { bridge = next; };
-export const isDemoSession = () => bridge?.demo ?? false;
 
 export async function api<T>(path: string, init: { method?: string; body?: unknown; auth?: boolean } = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };

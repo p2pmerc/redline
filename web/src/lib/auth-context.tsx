@@ -5,55 +5,39 @@ import { redlineConfig } from "./redline-config";
 
 interface RedlineSession {
   ready: boolean;
-  /** Signed in with Privy, or exploring with the built-in sample data. */
   signedIn: boolean;
-  demo: boolean;
   displayName: string;
   signIn: () => void;
   signOut: () => Promise<void>;
-  startDemo: () => void;
 }
 
 const SessionContext = createContext<RedlineSession | null>(null);
-const demoKey = "redline-demo-session";
 
 function SessionBridge({ children }: { children: ReactNode }) {
   const { ready, authenticated, user, login, logout, getAccessToken } = usePrivy();
-  const [demo, setDemo] = useState(() => sessionStorage.getItem(demoKey) === "1");
 
   const signOut = useCallback(async () => {
-    sessionStorage.removeItem(demoKey);
-    setDemo(false);
     if (authenticated) await logout();
   }, [authenticated, logout]);
-
-  const startDemo = useCallback(() => {
-    sessionStorage.setItem(demoKey, "1");
-    setDemo(true);
-  }, []);
 
   const value = useMemo<RedlineSession>(() => {
     const email = user?.email?.address;
     const x = user?.twitter?.username;
     const gh = user?.github?.username;
     const wallet = user?.wallet?.address;
-    const displayName = demo && !authenticated
-      ? "Sample researcher"
-      : email ?? (x ? `@${x}` : undefined) ?? gh ?? (wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "Signed in");
+    const displayName = email ?? (x ? `@${x}` : undefined) ?? gh ?? (wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "Signed in");
     return {
       ready,
-      signedIn: authenticated || demo,
-      demo: demo && !authenticated,
+      signedIn: authenticated,
       displayName,
       signIn: login,
       signOut,
-      startDemo,
     };
-  }, [ready, authenticated, demo, user, login, signOut, startDemo]);
+  }, [ready, authenticated, user, login, signOut]);
 
   // Data calls read the token and name through this bridge. It is set during render, not in an effect,
   // because child effects (the first data loads) run before a parent effect would.
-  setAuthBridge({ getToken: async () => (authenticated ? getAccessToken() : null), displayName: value.displayName, demo: value.demo });
+  setAuthBridge({ getToken: async () => (authenticated ? getAccessToken() : null), displayName: value.displayName });
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { encryptWithKey, isValidKeyHex, openReportBody, sealReportBody, sha256Hex, fromHex } from "./report-encryption";
 import { captureInviteKey, getReportKey, inviteLink, saveReportKey, takeInviteKey } from "./report-key-vault";
-import { robohashUrl, sampleSeed } from "@/components/ui/profile-avatar";
+import { robohashUrl } from "@/components/ui/profile-avatar";
 
 const store = new Map<string, string>();
 beforeEach(() => {
@@ -59,9 +59,5 @@ describe("avatars", () => {
   it("builds RoboHash addresses from the seed only", () => {
     const url = robohashUrl("a".repeat(32), 32);
     expect(url).toBe(`https://robohash.org/${"a".repeat(32)}?set=set1&size=64x64`);
-  });
-  it("gives sample people a stable seed that is not their name", () => {
-    expect(sampleSeed("Ada")).toBe(sampleSeed("Ada"));
-    expect(sampleSeed("Ada")).not.toContain("Ada");
   });
 });

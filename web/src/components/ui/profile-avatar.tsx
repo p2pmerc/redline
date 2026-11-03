@@ -11,12 +11,6 @@ const ROBOHASH_SET = "set1";
 export const robohashUrl = (seed: string, px: number) =>
   `https://robohash.org/${encodeURIComponent(seed)}?set=${ROBOHASH_SET}&size=${px * 2}x${px * 2}`;
 
-/** Cheap stable hash for built-in sample people, who have no account id. Not used for real users. */
-export const sampleSeed = (name: string): string => {
-  let h = 5381;
-  for (const ch of name) h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0;
-  return `sample-${h.toString(16).padStart(8, "0")}`;
-};
 
 interface ProfileAvatarProps {
   seed?: string;

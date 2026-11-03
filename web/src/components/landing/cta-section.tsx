@@ -14,7 +14,7 @@ export function CtaSection() {
           Found something? Seal it, then get paid for it.
         </h2>
         <p className="mx-auto mt-3 max-w-lg text-body opacity-70">
-          Open the app with sample data in one click, or sign in to start a real sealed report on testnet.
+          Sign in to start a real sealed report on NEAR testnet.
         </p>
         <div className="mt-7 flex flex-col items-center justify-center gap-2 sm:flex-row">
           <Button size="lg" variant="secondary" trailingIcon={ArrowRight} onClick={() => navigate("/app")}>Open Redline</Button>

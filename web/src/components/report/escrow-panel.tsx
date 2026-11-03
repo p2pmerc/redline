@@ -52,7 +52,7 @@ export function EscrowPanel({ report, onChange }: { report: Report; onChange: (n
   const MergeIcon = merge.icon;
 
   return (
-    <Panel preview={escrow?.mode === "preview" || !escrow}>
+    <Panel preview={escrow?.mode === "preview"}>
       {escrow || report.terms ? (
         <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
           <div>

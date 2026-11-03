@@ -38,7 +38,7 @@ export function ReportKeyPanel({ report, onUnlocked }: { report: Report; onUnloc
     );
   }
 
-  if (report.role !== "researcher" || !key || report.sample) return null;
+  if (report.role !== "researcher" || !key) return null;
   return (
     <section className="rounded-2xl bg-surface-3 p-5 shadow-surface-2" aria-label="Report key backup">
       <h2 className="mb-2 flex items-center gap-2 text-subtitle font-semibold"><Key size={16} /> Your report key</h2>

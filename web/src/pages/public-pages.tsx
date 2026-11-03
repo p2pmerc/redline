@@ -1,4 +1,4 @@
-import { ProfileAvatar, sampleSeed } from "@/components/ui/profile-avatar";
+import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Megaphone, FileMd, FilePdf, ShieldCheck, ArrowSquareOut, Compass, HouseLine } from "@phosphor-icons/react";
 import { SiteHeader } from "@/components/layout/site-header";
@@ -61,7 +61,7 @@ export function DisclosureDetailPage() {
               </div>
               <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight">{data.title}</h1>
               <span className="inline-flex items-center gap-2 text-subtitle">
-                <ProfileAvatar size="md" name="Researcher" seed={data.researcherSeed ?? (data.sample ? sampleSeed(`researcher:${data.id}`) : undefined)} />
+                <ProfileAvatar size="md" name="Researcher" seed={data.researcherSeed} />
                 <span className="font-medium">Researcher</span>
               </span>
               <p className="text-caption text-muted-foreground">

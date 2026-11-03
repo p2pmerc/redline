@@ -44,7 +44,7 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function UserBlock() {
-  const { displayName, demo, signOut } = useSession();
+  const { displayName, signOut } = useSession();
   const [pending, setPending] = useState(false);
   return (
     <div className="space-y-2">
@@ -52,7 +52,6 @@ function UserBlock() {
         <UserCircle size={28} weight="duotone" className="shrink-0 text-muted-foreground" />
         <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
           <p className="w-full truncate text-subtitle font-medium leading-tight">{displayName}</p>
-          {demo && <Badge color="amber"><Flask size={11} /> Sample data</Badge>}
         </div>
       </div>
       <Button variant="ghost" className="w-full justify-start" leadingIcon={SignOut} loading={pending}

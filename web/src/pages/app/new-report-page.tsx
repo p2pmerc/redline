@@ -11,7 +11,6 @@ import { useToast } from "@/components/feedback/toast-provider";
 import { redlineConfig } from "@/lib/redline-config";
 import { sealKeyToEnclave, sealReportBody } from "@/lib/report-encryption";
 import { createReport } from "@/lib/data-source";
-import { isDemoSession } from "@/lib/api-client";
 import { exportMarkdown, exportPdf } from "@/lib/report-export";
 import { cn } from "@/lib/utils";
 import type { Severity } from "@/lib/redline-types";
@@ -67,10 +66,6 @@ export function NewReportPage() {
   const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   async function seal() {
-    if (isDemoSession()) {
-      setError("Sample data is read-only. Sign in to seal a real report.");
-      return;
-    }
     setSealing(true);
     setError(null);
     setProgress({});

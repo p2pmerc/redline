@@ -1,11 +1,11 @@
 import { Outlet } from "react-router-dom";
-import { SignIn, Flask, ShieldCheck, Spinner } from "@phosphor-icons/react";
+import { SignIn, ShieldCheck, Spinner } from "@phosphor-icons/react";
 import { RedlineMark } from "@/components/redline-logo";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-context";
 
 export function AuthGate() {
-  const { ready, signedIn, signIn, startDemo } = useSession();
+  const { ready, signedIn, signIn } = useSession();
 
   if (!ready) {
     return (
@@ -26,7 +26,6 @@ export function AuthGate() {
         </p>
         <div className="mt-6 space-y-2">
           <Button className="w-full" leadingIcon={SignIn} onClick={signIn}>Continue</Button>
-          <Button className="w-full" variant="secondary" leadingIcon={Flask} onClick={startDemo}>Preview with sample data</Button>
         </div>
         <p className="mt-5 flex items-center justify-center gap-1.5 text-caption text-muted-foreground">
           <ShieldCheck size={14} /> Testnet only. No real funds.
