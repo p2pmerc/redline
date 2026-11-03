@@ -158,7 +158,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
       // The contract wants the disclosure date at least 7 days past the block time.
       const day = 86_400_000;
       const deadlineMs = Math.min(Math.max(new Date(report.disclosureDeadline).getTime(), now.getTime() + 7 * day + 3_600_000), now.getTime() + 364 * day);
-      const registered = await chain.call("researcher", "register_report", { report_id: report.id, content_hash: report.contentHash, disclosure_deadline_ns: String(BigInt(deadlineMs) * 1_000_000n) }, NEAR_FEE);
+      const registered = await chain.call("researcher", "register_report", { report_id: report.id, content_hash: report.contentHash, disclosure_deadline_ns: BigInt(deadlineMs) * 1_000_000n }, NEAR_FEE);
       await chain.call("researcher", "set_team_account", { report_id: report.id, team: chain.teamAccountId });
       sealTx = registered.txHash;
     }

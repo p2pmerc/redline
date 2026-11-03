@@ -48,6 +48,12 @@ function failureText(outcome: unknown): string | undefined {
   return panic ? panic[1]!.trim() : "the contract rejected the call";
 }
 
+/** JSON for contract arguments. A bigint becomes a bare number, which u64 and u128-as-number fields need. */
+export function contractArgs(args: Record<string, unknown>): Uint8Array {
+  const text = JSON.stringify(args, (_k, v) => (typeof v === "bigint" ? `__BIG__${v}` : v)).replace(/"__BIG__(\d+)"/g, "$1");
+  return new TextEncoder().encode(text);
+}
+
 export function createChainRelay(options: RelayOptions): ChainRelay {
   const provider = new JsonRpcProvider({ url: options.rpcUrl ?? "https://rpc.testnet.near.org" });
   const accounts = Object.fromEntries(
@@ -64,7 +70,7 @@ export function createChainRelay(options: RelayOptions): ChainRelay {
       let result;
       try {
         result = await accounts[role].callFunctionRaw({
-          contractId: options.contractId, methodName: method, args, deposit: depositYocto, gas: BigInt(gasTgas) * TGAS, waitUntil: "FINAL",
+          contractId: options.contractId, methodName: method, args: contractArgs(args), deposit: depositYocto, gas: BigInt(gasTgas) * TGAS, waitUntil: "FINAL",
         });
       } catch (err) {
         throw new ChainError(`NEAR testnet did not accept the ${method} call: ${err instanceof Error ? err.message.slice(0, 160) : "unknown error"}`);
