@@ -133,6 +133,41 @@ describe("invites and chat", () => {
   });
 });
 
+describe("withdrawing access", () => {
+  it("shuts a revoked member out of the report and chat, and the link stops working", async () => {
+    const { created } = await newReport();
+    const id = created.json.id as string;
+    const invite = await call("user-alice", "POST", `/reports/${id}/invites`, { channel: "email", handle: "sec@acme.dev" });
+    const { token, id: inviteId } = invite.json.invites[0];
+    expect((await call("user-bob", "POST", `/invites/${token}/redeem`)).status).toBe(200);
+    expect((await call("user-bob", "GET", `/reports/${id}`)).status).toBe(200);
+    expect((await call("user-bob", "POST", `/reports/${id}/messages`, (() => { const m = seal("hi"); return { ciphertextHex: m.ciphertextHex, hash: m.contentHash }; })())).status).toBe(201);
+
+    expect((await call("user-bob", "POST", `/reports/${id}/invites/${inviteId}/revoke`)).status).toBe(403);
+    expect((await call("user-alice", "POST", `/reports/${id}/invites/${inviteId}/revoke`)).status).toBe(200);
+
+    expect((await call("user-bob", "GET", `/reports/${id}`)).status).toBe(404);
+    expect((await call("user-bob", "POST", `/reports/${id}/messages`, { ciphertextHex: "aa", hash: "bb" })).status).toBe(404);
+    expect((await call("user-bob", "POST", `/invites/${token}/redeem`)).status).toBe(404);
+    const after = await call("user-alice", "GET", `/reports/${id}`);
+    expect(after.json.messages).toEqual([]);
+    expect(after.json.invites[0].status).toBe("revoked");
+  });
+
+  it("does not let strangers or the team revoke, and keeps the team once money is in escrow", async () => {
+    const { created } = await newReport();
+    const id = created.json.id as string;
+    const invite = await call("user-alice", "POST", `/reports/${id}/invites`, { channel: "email", handle: "sec@acme.dev" });
+    const { token, id: inviteId } = invite.json.invites[0];
+    expect((await call("user-eve", "POST", `/reports/${id}/invites/${inviteId}/revoke`)).status).toBe(404);
+    await call("user-bob", "POST", `/invites/${token}/redeem`);
+    await call("user-bob", "POST", `/reports/${id}/terms`, { amountNear: 5, repo: "acme/widgets" });
+    await call("user-alice", "POST", `/reports/${id}/terms/accept`);
+    await call("user-bob", "POST", `/reports/${id}/fund`);
+    expect((await call("user-alice", "POST", `/reports/${id}/invites/${inviteId}/revoke`)).status).toBe(409);
+  });
+});
+
 describe("escrow flow on the preview ledger", () => {
   async function agreed() {
     const { created, sealed } = await newReport();

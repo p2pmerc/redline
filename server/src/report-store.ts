@@ -43,7 +43,7 @@ export class ReportStore {
 
   findInvite(token: string): { report: StoredReport; inviteId: string } | undefined {
     for (const report of this.reports.values()) {
-      const invite = report.invites.find((i) => i.token === token);
+      const invite = report.invites.find((i) => i.token === token && i.status !== "revoked");
       if (invite) return { report, inviteId: invite.id };
     }
     return undefined;

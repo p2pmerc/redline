@@ -10,7 +10,7 @@ export interface TimelineEntry {
   id: string;
   at: string;
   kind:
-    | "sealed" | "invite_sent" | "invite_redeemed" | "message" | "agreement_signed" | "escrow_funded"
+    | "sealed" | "invite_sent" | "invite_redeemed" | "invite_revoked" | "message" | "agreement_signed" | "escrow_funded"
     | "pr_linked" | "pr_merged" | "payout" | "refund" | "disclosure_notice" | "published" | "terms_proposed";
   title: string;
   detail?: string;
@@ -22,7 +22,7 @@ export interface InviteRecord {
   token: string;
   channel: InviteChannel;
   handle: string;
-  status: "pending" | "redeemed" | "expired";
+  status: "pending" | "redeemed" | "expired" | "revoked";
   createdAt: string;
 }
 

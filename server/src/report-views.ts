@@ -78,6 +78,6 @@ export function publicView(report: StoredReport) {
     evidenceHash: published.evidenceHash,
     outcome: report.status === "paid" ? "fixed_and_paid" : report.status === "refunded" ? "refunded" : "disclosed",
     rewardNear: report.status === "paid" ? report.escrow?.amountNear : undefined,
-    timeline: report.timeline.filter((t) => t.kind !== "message" && t.kind !== "invite_sent" && t.kind !== "invite_redeemed"),
+    timeline: report.timeline.filter((t) => t.kind !== "message" && t.kind !== "invite_sent" && t.kind !== "invite_redeemed" && t.kind !== "invite_revoked"),
   };
 }

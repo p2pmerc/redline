@@ -163,6 +163,29 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     res.status(201).json(view(report, role));
   });
 
+  // Revoking closes the door at once: a redeemed member stops being a party, so every read of the
+  // report and the chat answers 404 for them. Only allowed before the escrow holds money.
+  router.post("/reports/:id/invites/:inviteId/revoke", (req, res) => {
+    const { report, role } = party(req);
+    if (role !== "researcher") throw new HttpError(403, "Only the researcher can withdraw an invite.");
+    const invite = report.invites.find((i) => i.id === req.params.inviteId);
+    if (!invite) throw new HttpError(404, "That invite does not exist.");
+    if (invite.status === "revoked") return void res.json(view(report, role));
+    if (invite.status === "redeemed" && report.escrow) throw new HttpError(409, "Funds are in escrow, so the security contact can no longer be removed.");
+    const wasMember = invite.status === "redeemed";
+    invite.status = "revoked";
+    if (wasMember) {
+      report.teamId = undefined;
+      report.teamName = undefined;
+      report.terms = undefined;
+      report.status = "registered";
+      report.messages = []; // the next person invited must not inherit the previous negotiation
+    }
+    log(report, { kind: "invite_revoked", title: "Invite withdrawn", detail: `${invite.channel}: ${invite.handle}` });
+    store.save(report);
+    res.json(view(report, role));
+  });
+
   router.get("/invites/:token", (req, res) => {
     const found = store.findInvite(String(req.params.token));
     if (!found) throw new HttpError(404, "This invite link is not valid.");
