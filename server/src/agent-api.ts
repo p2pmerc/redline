@@ -10,7 +10,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { rateLimit } from "express-rate-limit";
 import type { ApiDeps } from "./api-routes.js";
 import type { StoredReport } from "./report-records.js";
-import { buildLeaderboard, totalsOf } from "./leaderboard.js";
+import { buildLeaderboard, totalsOf, type BoardItem } from "./leaderboard.js";
 import { isPublic, partyView, publicView, roleOf, stageOf, type PublicAuthor } from "./report-views.js";
 
 /** sha256 of the enclave WASM build documented in the README. Used when the contract pins no version. */
@@ -173,9 +173,9 @@ export function createAgentRouter(deps: ApiDeps): express.Router {
 
 
   /** One public disclosure, reduced to what the leaderboard counts. */
-  const boardItem = (r: StoredReport) => {
+  const boardItem = (r: StoredReport): BoardItem => {
     const s = summary(r);
-    return { researcher: s.researcher, severity: s.severity, outcome: s.outcome, bountyNear: s.bountyNear, paidAt: s.timestamps.paidAt };
+    return { researcher: s.researcher, severity: s.severity, outcome: s.outcome as BoardItem["outcome"], bountyNear: s.bountyNear, paidAt: s.timestamps.paidAt };
   };
   const HANDLE_PATTERN = /^[a-z0-9_-]{3,30}$/;
 
