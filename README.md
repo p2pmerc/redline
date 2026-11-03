@@ -38,6 +38,22 @@ Tracks this fits: `privacy`, `security`, and `realworld`.
 5. Link a fix PR in the reported repo and merge it under the expected GitHub login → the enclave merge check returns `merged` and the contract pays the researcher's payout account. No manual "claim" click is required once the poller sees the result.
 6. Open `/disclosures` → paid / published reports appear publicly; sealed ones never do.
 
+## Screenshots
+
+A real report taken all the way through on testnet: sealed, funded, fix PR merged, paid by the enclave check.
+
+**Dashboard: six reports across every status**
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+**Report progress: funded, fix merged, paid**
+
+![Report progress](docs/screenshots/report-progress.png)
+
+**Full timeline, from seal to payout**
+
+![Report timeline](docs/screenshots/report-timeline.png)
+
 ## NEAR and OutLayer
 
 | Piece | Role |
