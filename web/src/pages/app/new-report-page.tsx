@@ -46,6 +46,15 @@ curl -i https://example.com/endpoint
 ## Suggested fix
 `;
 
+
+function normalizeRepoInput(raw: string): string {
+  const value = raw.trim().replace(/\.git$/i, "");
+  if (!value) return "";
+  if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) return value;
+  const m = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/?$/i.exec(value);
+  return m ? `${m[1]}/${m[2]}` : value;
+}
+
 export function NewReportPage() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -59,7 +68,8 @@ export function NewReportPage() {
   const [progress, setProgress] = useState<Record<string, StepState>>({});
   const [error, setError] = useState<string | null>(null);
 
-  const repoValid = !repo || /^[\w.-]+\/[\w.-]+$/.test(repo.trim());
+  const normalizedRepo = normalizeRepoInput(repo);
+  const repoValid = !repo.trim() || /^[\w.-]+\/[\w.-]+$/.test(normalizedRepo);
   const canSeal = title.trim().length >= 4 && body.trim().length >= 20 && repoValid && !sealing;
 
   const mark = (id: string, state: StepState) => setProgress((p) => ({ ...p, [id]: state }));
@@ -88,7 +98,7 @@ export function NewReportPage() {
 
       current = "chain";
       mark("chain", "active");
-      const report = await createReport({ title, repo: repo.trim(), severity, disclosureDays: Number(days), body, summary: summary.trim(), sealedKeyHex }, sealed);
+      const report = await createReport({ title, repo: normalizedRepo || "", severity, disclosureDays: Number(days), body, summary: summary.trim(), sealedKeyHex }, sealed);
       mark("chain", "done");
 
       toast.show({ tone: "success", title: "Report sealed", description: `Hash ${sealed.contentHash.slice(0, 10)}… registered.` });
@@ -114,8 +124,8 @@ export function NewReportPage() {
       <section className="space-y-3 card-hairline p-5">
         <InputGroup>
           <InputField index={0} label="Title" icon={Bug} placeholder="Short, specific, no exploit details" value={title} onChange={setTitle} disabled={sealing} />
-          <InputField index={1} label="Affected repository (optional)" icon={GitBranch} placeholder="owner/name" value={repo} onChange={setRepo} disabled={sealing}
-            error={repoValid ? undefined : "Use the form owner/name"} />
+          <InputField index={1} label="Affected repository (optional)" icon={GitBranch} placeholder="owner/name or github.com/owner/name" value={repo} onChange={setRepo} disabled={sealing}
+            error={repoValid ? undefined : "Use owner/name or a github.com/owner/name URL"} />
           <InputField index={2} label="Short summary (optional)" icon={Fingerprint} placeholder="Shown to invited people. No exploit details." value={summary} onChange={setSummary} disabled={sealing} />
         </InputGroup>
         <div className="grid gap-3 sm:grid-cols-2">

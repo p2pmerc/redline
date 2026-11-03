@@ -14,6 +14,24 @@ import { Tooltip } from "@/components/ui/tooltip";
 
 const lowlight = createLowlight(common);
 
+const CODE_LANGS = [
+  { value: "", label: "Plain text" },
+  { value: "javascript", label: "JavaScript" },
+  { value: "typescript", label: "TypeScript" },
+  { value: "tsx", label: "TSX" },
+  { value: "python", label: "Python" },
+  { value: "rust", label: "Rust" },
+  { value: "go", label: "Go" },
+  { value: "bash", label: "Bash" },
+  { value: "json", label: "JSON" },
+  { value: "solidity", label: "Solidity" },
+  { value: "sql", label: "SQL" },
+  { value: "yaml", label: "YAML" },
+  { value: "markdown", label: "Markdown" },
+  { value: "html", label: "HTML" },
+  { value: "css", label: "CSS" },
+];
+
 interface ReportEditorProps {
   /** Markdown source. */
   value: string;
@@ -51,6 +69,7 @@ const actions: (ToolbarAction | "divider")[] = [
 
 export function ReportEditor({ value, onChange, editable = true, placeholder = "Describe the vulnerability, its impact and how to reproduce it…", className }: ReportEditorProps) {
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({ codeBlock: false }),
       CodeBlockLowlight.configure({ lowlight }),
@@ -101,6 +120,21 @@ export function ReportEditor({ value, onChange, editable = true, placeholder = "
                 </button>
               </Tooltip>
             ),
+          )}
+          {editor.isActive("codeBlock") && (
+            <label className="ml-1 flex items-center gap-1.5 text-caption text-muted-foreground">
+              <span className="sr-only">Code language</span>
+              <select
+                className="h-8 rounded-lg border border-border/60 bg-background px-2 text-caption text-foreground outline-none"
+                value={(editor.getAttributes("codeBlock").language as string | undefined) ?? ""}
+                onChange={(e) => editor.chain().focus().updateAttributes("codeBlock", { language: e.target.value || null }).run()}
+                aria-label="Code language"
+              >
+                {CODE_LANGS.map((l) => (
+                  <option key={l.value || "plain"} value={l.value}>{l.label}</option>
+                ))}
+              </select>
+            </label>
           )}
         </div>
       )}

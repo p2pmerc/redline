@@ -24,6 +24,20 @@ export interface MergeAnswer {
 
 export const REPO_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
+/** Accepts `owner/name` or a github.com URL and returns `owner/name`, or undefined. */
+export function normalizeRepoRef(raw: string): string | undefined {
+  const value = raw.trim().replace(/\.git$/i, "");
+  if (!value) return undefined;
+  if (REPO_PATTERN.test(value)) return value;
+  const fromUrl = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/?$/i.exec(value);
+  if (fromUrl) {
+    const repo = `${fromUrl[1]}/${fromUrl[2]}`;
+    return REPO_PATTERN.test(repo) ? repo : undefined;
+  }
+  return undefined;
+}
+
+
 /** Accepts `https://github.com/owner/repo/pull/12` and returns its parts, or undefined. */
 export function parsePullRequestUrl(url: string): { repo: string; pullRequest: number } | undefined {
   const match = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/pull\/(\d{1,9})\/?$/.exec(url.trim());
