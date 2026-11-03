@@ -7,6 +7,7 @@ import type { ReportStore } from "./report-store.js";
 import { ProfileStore, type ResearcherProfile } from "./profile-store.js";
 import type { InviteRecord, StoredReport, TimelineEntry } from "./report-records.js";
 import type { ServerConfig } from "./server-config.js";
+import type { ChainReader } from "./chain-reader.js";
 import type { MergeLookup, PrAuthorLookup } from "./github-merge-lookup.js";
 import * as ledger from "./escrow-ledger.js";
 import { LedgerError, type MergeAnswer } from "./escrow-ledger.js";
@@ -34,6 +35,8 @@ export interface ApiDeps {
   walletAuth?: WalletAuth;
   /** The OutLayer enclave that holds report keys. The server only relays sealed requests and answers. */
   enclave?: EnclaveClient;
+  /** Read-only chain lookups for the public /api/v1/verify endpoint. */
+  chainReader?: ChainReader;
   now?: () => Date;
 }
 

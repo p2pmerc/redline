@@ -4,6 +4,8 @@ import express from "express";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { createApiRouter } from "./api-routes.js";
+import { createAgentRouter, createDiscoveryRouter } from "./agent-api.js";
+import { createChainReader } from "./chain-reader.js";
 import { enclaveFromEnv } from "./enclave-client.js";
 import { createMergeLookup, createPrAuthorLookup } from "./github-merge-lookup.js";
 import { createPrivyVerifier } from "./privy-token-verifier.js";
@@ -24,7 +26,9 @@ export function createApp(deps: ApiDeps): express.Express {
   app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false, crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" } }));
   app.use("/api", rateLimit({ windowMs: 60_000, limit: 240, standardHeaders: true, legacyHeaders: false, message: { error: "Too many requests. Slow down for a minute." } }));
   app.use("/api", express.json({ limit: "3mb" }));
+  app.use("/api/v1", createAgentRouter(deps));
   app.use("/api", createApiRouter(deps));
+  app.use(createDiscoveryRouter(deps));
 
   if (existsSync(path.join(config.webDist, "index.html"))) {
     app.use(express.static(config.webDist, { index: false, maxAge: "1h" }));
@@ -64,7 +68,7 @@ export function startServer(config: ServerConfig = loadConfig()) {
     console.log(`purged ${removed} tabtester seed reports`);
   }
   const prAuthorLookup = createPrAuthorLookup(undefined, config.githubToken);
-  const app = createApp({ config, store, profiles, walletAuth, enclave, verifyToken: combineVerifiers(walletAuth, createPrivyVerifier(config.privyAppId)), mergeLookup, prAuthorLookup, relay, accountExists: createAccountChecker(process.env.NEAR_RPC_URL || undefined) });
+  const app = createApp({ config, store, profiles, walletAuth, enclave, verifyToken: combineVerifiers(walletAuth, createPrivyVerifier(config.privyAppId)), mergeLookup, prAuthorLookup, relay, accountExists: createAccountChecker(process.env.NEAR_RPC_URL || undefined), chainReader: config.ledgerMode === "testnet" ? createChainReader(process.env.NEAR_RPC_URL || undefined) : undefined });
   const githubLoginOf = (userId: string): string | undefined => githubLoginFromLink(profiles.get(userId)?.links.github);
   if (config.ledgerMode === "testnet" && relay && process.env.PAYOUT_AUTOMATION !== "off") {
     const pollMs = Number(process.env.PAYOUT_POLL_MS) || (config.githubToken ? 65_000 : 300_000);

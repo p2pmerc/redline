@@ -11,7 +11,8 @@ export function isTestnetAccountId(value: string): boolean {
 export type AccountChecker = (accountId: string) => Promise<boolean>;
 
 /** Asks the testnet RPC whether the account exists. Network errors throw, they never read as "missing". */
-export function createAccountChecker(rpcUrl = "https://rpc.testnet.near.org", fetchImpl: typeof fetch = fetch): AccountChecker {
+export const DEFAULT_TESTNET_RPC = "https://rpc.testnet.near.org";
+export function createAccountChecker(rpcUrl = DEFAULT_TESTNET_RPC, fetchImpl: typeof fetch = fetch): AccountChecker {
   return async (accountId) => {
     const res = await fetchImpl(rpcUrl, {
       method: "POST",
