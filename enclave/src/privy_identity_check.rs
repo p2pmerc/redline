@@ -15,10 +15,10 @@ pub const APP_ID: &str = match option_env!("REDLINE_PRIVY_APP_ID") {
     Some(id) => id,
     None => "cmw091k5e006v0glbrx3ouzry",
 };
-/// Privy's client API wants an allowed Origin. Set `REDLINE_APP_ORIGIN` at build time to the deployed site.
+/// Privy's client API wants an allowed Origin. Defaults to the deployed site; override with `REDLINE_APP_ORIGIN` at build time.
 pub const APP_ORIGIN: &str = match option_env!("REDLINE_APP_ORIGIN") {
     Some(origin) => origin,
-    None => "http://localhost:5173",
+    None => "https://redline-app-production-b0e6.up.railway.app",
 };
 
 #[derive(Debug, PartialEq)]

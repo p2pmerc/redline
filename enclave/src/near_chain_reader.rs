@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 pub const DEFAULT_RPC: &str = "https://test.rpc.fastnear.com";
 pub const DEFAULT_CONTRACT: &str = match option_env!("REDLINE_ESCROW_CONTRACT") {
     Some(id) => id,
-    None => "escrow.redline.testnet",
+    None => "redline-escrow.testnet",
 };
 
 /// The slice of the contract's `ReportRecord` the enclave cares about.
