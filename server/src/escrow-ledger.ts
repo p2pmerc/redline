@@ -91,21 +91,47 @@ export function fundEscrow(report: StoredReport, role: Role | undefined, now: Da
   note(report, now, { kind: "escrow_funded", title: "Escrow funded", detail: `${report.terms.amountNear} NEAR locked (preview ledger, no funds move)`, txHash: previewTxHash(report.id, "fund") });
 }
 
-export function linkPullRequest(report: StoredReport, role: Role | undefined, url: string, now: Date): void {
-  requireRole(role, "researcher");
+/** Team submits a fix PR in the agreed repo. Replaceable until the researcher confirms. */
+export function submitPullRequest(report: StoredReport, role: Role | undefined, url: string, now: Date): void {
+  requireRole(role, "team");
   if (report.status !== "funded" || !report.escrow) throw new LedgerError("escrow must be funded and not yet confirmed");
+  if (report.escrow.prConfirmed) throw new LedgerError("the pull request is locked after confirmation");
   const parsed = parsePullRequestUrl(url);
   if (!parsed) throw new LedgerError("use a link like https://github.com/owner/repo/pull/123", 400);
   if (parsed.repo.toLowerCase() !== report.escrow.repo?.toLowerCase()) throw new LedgerError(`the pull request must be in ${report.escrow.repo}`, 400);
   report.escrow.pullRequestUrl = `https://github.com/${parsed.repo}/pull/${parsed.pullRequest}`;
   report.escrow.pullRequest = parsed.pullRequest;
+  report.escrow.prConfirmed = false;
   report.escrow.mergeCheck = "pending";
-  note(report, now, { kind: "pr_linked", title: "Pull request linked", detail: report.escrow.pullRequestUrl, txHash: previewTxHash(report.id, "pr", String(parsed.pullRequest)) });
+  note(report, now, { kind: "pr_linked", title: "Fix pull request submitted", detail: report.escrow.pullRequestUrl, txHash: previewTxHash(report.id, "pr", String(parsed.pullRequest)) });
+}
+
+/** Researcher locks the submitted PR and the GitHub author the enclave must see on it. */
+export function confirmPullRequest(report: StoredReport, role: Role | undefined, expectedAuthor: string, now: Date): void {
+  requireRole(role, "researcher");
+  if (report.status !== "funded" || !report.escrow) throw new LedgerError("escrow must be funded and not yet confirmed");
+  if (!report.escrow.pullRequest || !report.escrow.pullRequestUrl) throw new LedgerError("the team must submit a pull request first");
+  if (report.escrow.prConfirmed) throw new LedgerError("the pull request is already confirmed");
+  const login = expectedAuthor.trim().replace(/^@/, "").toLowerCase();
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/i.test(login)) throw new LedgerError("not a valid GitHub login", 400);
+  report.githubLogin = login;
+  report.escrow.prConfirmed = true;
+  note(report, now, {
+    kind: "pr_confirmed",
+    title: "Fix pull request confirmed",
+    detail: `${report.escrow.pullRequestUrl} · expected author @${login}`,
+    txHash: previewTxHash(report.id, "pr-confirm", String(report.escrow.pullRequest), login),
+  });
+}
+
+/** @deprecated Use submitPullRequest (team) + confirmPullRequest (researcher). */
+export function linkPullRequest(report: StoredReport, role: Role | undefined, url: string, now: Date): void {
+  submitPullRequest(report, role, url, now);
 }
 
 /** First answer: a "merged" answer moves the report to merge_confirmed. */
 export function applyConfirmAnswer(report: StoredReport, answer: MergeAnswer, now: Date): void {
-  if (report.status !== "funded" || !report.escrow?.pullRequest) throw new LedgerError("link a pull request first");
+  if (report.status !== "funded" || !report.escrow?.pullRequest || !report.escrow.prConfirmed) throw new LedgerError("confirm the pull request first");
   report.escrow.mergeCheck = answer.status;
   if (answer.status === "merged") {
     report.escrow.mergeCommit = answer.mergeCommit;

@@ -11,7 +11,7 @@ export interface TimelineEntry {
   at: string;
   kind:
     | "sealed" | "invite_sent" | "invite_redeemed" | "invite_revoked" | "message" | "agreement_signed" | "escrow_funded"
-    | "pr_linked" | "pr_merged" | "payout" | "refund" | "disclosure_notice" | "published" | "terms_proposed" | "payout_account" | "report_edited";
+    | "pr_linked" | "pr_confirmed" | "pr_merged" | "payout" | "refund" | "disclosure_notice" | "published" | "terms_proposed" | "payout_account" | "report_edited";
   title: string;
   detail?: string;
   txHash?: string;
@@ -59,6 +59,8 @@ export interface EscrowRecord {
   pullRequestUrl?: string;
   repo?: string;
   pullRequest?: number;
+  /** True after the researcher confirms the team's submitted fix PR (locks number + expected author). */
+  prConfirmed?: boolean;
   mergeCheck: MergeCheck;
   mergeCommit?: string;
 }
@@ -92,7 +94,7 @@ export interface StoredReport {
   status: LedgerStatus;
   /** NEAR account bound on chain to receive the reward. Required before the team can fund. */
   payoutAccount?: string;
-  /** GitHub login bound on chain; the enclave requires the merged pull request to be authored by it. */
+  /** Expected GitHub author of the confirmed fix PR (set when the researcher confirms, not from the researcher profile). */
   githubLogin?: string;
   terms?: TermsRecord;
   escrow?: EscrowRecord;

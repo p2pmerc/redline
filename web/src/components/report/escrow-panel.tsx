@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InputField, InputGroup } from "@/components/ui/input-group";
 import { useToast } from "@/components/feedback/toast-provider";
-import { acceptTerms, bindPayoutAccount, checkMerge, claimPayout, fundEscrow, linkPullRequest, proposeTerms, refundEscrow } from "@/lib/data-source";
+import { acceptTerms, bindPayoutAccount, checkMerge, claimPayout, confirmPullRequest, fundEscrow, linkPullRequest, proposeTerms, refundEscrow } from "@/lib/data-source";
 import { daysUntil, formatNear, shortDate } from "@/lib/format";
 import type { EscrowState, Report } from "@/lib/redline-types";
 
@@ -19,7 +19,7 @@ const mergeCopy: Record<EscrowState["mergeCheck"], { label: string; color: "gray
   unknown: { label: "GitHub did not answer, will retry", color: "red", icon: WarningCircle },
 };
 
-type Busy = null | "payout" | "propose" | "accept" | "fund" | "link" | "check" | "claim" | "refund";
+type Busy = null | "payout" | "propose" | "accept" | "fund" | "link" | "confirm" | "check" | "claim" | "refund";
 
 export function EscrowPanel({ report, onChange }: { report: Report; onChange: (next: Report) => void }) {
   const toast = useToast();
@@ -135,26 +135,42 @@ export function EscrowPanel({ report, onChange }: { report: Report; onChange: (n
         )}
         {report.terms?.accepted && !escrow && !isTeam && <p className="text-caption text-muted-foreground">Terms are signed. Waiting for the team to fund the escrow.</p>}
 
-        {/* 4. link the pull request, check, claim */}
+        {/* 4. team submits fix PR → researcher confirms → check / claim */}
         {funded && (
           <>
-            {!isTeam && !confirmed && (
+            {isTeam && !escrow?.prConfirmed && !confirmed && (
               <>
                 <InputGroup>
-                  <InputField index={0} label="Fix pull request" icon={GitPullRequest} placeholder={`https://github.com/${escrow?.contractId ? "owner/repo" : "owner/repo"}/pull/123`} value={prUrl} onChange={setPrUrl} disabled={busy !== null} />
+                  <InputField index={0} label="Fix pull request" icon={GitPullRequest} placeholder={`https://github.com/${report.repo ?? "owner/repo"}/pull/123`} value={prUrl} onChange={setPrUrl} disabled={busy !== null} />
                 </InputGroup>
                 <Button variant="secondary" className="w-full" loading={busy === "link"} disabled={!prUrl.trim() || busy !== null}
-                  onClick={() => run("link", "Linking pull request…", "Pull request linked", () => linkPullRequest(report.id, prUrl.trim()))}>
-                  Link PR
+                  onClick={() => run("link", "Submitting pull request…", "Pull request submitted", () => linkPullRequest(report.id, prUrl.trim()))}>
+                  Submit fix PR
                 </Button>
               </>
             )}
-            {isTeam && escrow?.pullRequestUrl && <p className="break-all text-caption text-muted-foreground">Fix: {escrow.pullRequestUrl}</p>}
-            {isTeam && !escrow?.pullRequestUrl && <p className="text-caption text-muted-foreground">Waiting for the researcher to link the fix pull request.</p>}
+            {!isTeam && !escrow?.pullRequestUrl && !confirmed && (
+              <p className="text-caption text-muted-foreground">Waiting for the team to submit the fix pull request.</p>
+            )}
+            {escrow?.pullRequestUrl && (
+              <p className="break-all text-caption text-muted-foreground">
+                Fix: {escrow.pullRequestUrl}
+                {escrow.prConfirmed || confirmed ? (report.githubLogin ? ` · @${report.githubLogin}` : " · confirmed") : " · awaiting confirmation"}
+              </p>
+            )}
+            {!isTeam && !!escrow?.pullRequestUrl && !escrow.prConfirmed && !confirmed && (
+              <Button className="w-full" loading={busy === "confirm"} leadingIcon={Signature} disabled={busy !== null}
+                onClick={() => run("confirm", "Confirming pull request…", "Pull request confirmed", () => confirmPullRequest(report.id))}>
+                Confirm this fix PR
+              </Button>
+            )}
+            {isTeam && !!escrow?.pullRequestUrl && !escrow.prConfirmed && !confirmed && (
+              <p className="text-caption text-muted-foreground">Waiting for the researcher to confirm this pull request. Once confirmed it is locked.</p>
+            )}
 
-            {!confirmed && escrow?.pullRequestUrl && <p className="text-caption text-muted-foreground">Payout is automatic: once the pull request is merged by the linked author, the escrow pays out within a few minutes.</p>}
+            {!confirmed && escrow?.prConfirmed && <p className="text-caption text-muted-foreground">Payout is automatic: once this pull request is merged by @{report.githubLogin ?? "the expected author"}, the escrow pays out within a few minutes.</p>}
             {!confirmed && (
-              <Button variant="secondary" className="w-full" loading={busy === "check"} leadingIcon={ArrowsClockwise} disabled={!escrow?.pullRequestUrl || busy !== null}
+              <Button variant="secondary" className="w-full" loading={busy === "check"} leadingIcon={ArrowsClockwise} disabled={!escrow?.prConfirmed || busy !== null}
                 onClick={() => run("check", "Checking GitHub…", "Merge check complete", () => checkMerge(report.id))}>
                 Check merge
               </Button>

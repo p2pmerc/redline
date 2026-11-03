@@ -38,6 +38,7 @@ export interface TimelineEvent {
     | "agreement_signed"
     | "escrow_funded"
     | "pr_linked"
+    | "pr_confirmed"
     | "pr_merged"
     | "payout"
     | "refund"
@@ -68,6 +69,8 @@ export interface EscrowState {
   expiresAt: string;
   contractId: string;
   pullRequestUrl?: string;
+  /** Locked after the researcher confirms the team's submitted fix. */
+  prConfirmed?: boolean;
   mergeCheck: "pending" | "not_merged" | "merged" | "unknown";
   /** "preview" while the testnet contract is not connected: the state machine runs, no funds move. */
   mode?: "preview" | "testnet";
@@ -112,6 +115,8 @@ export interface Report {
   rewardNear?: number;
   /** NEAR account bound on chain to receive the reward. Parties only. */
   payoutAccount?: string;
+  /** Expected GitHub author of the confirmed fix PR. */
+  githubLogin?: string;
   summary: string;
   body: string; // markdown
   escrow?: EscrowState;

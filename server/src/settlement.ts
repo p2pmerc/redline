@@ -12,7 +12,7 @@ export interface SettlementContext {
   relay?: ChainRelay;
   mergeLookup: MergeLookup;
   now: () => Date;
-  /** Researcher's linked GitHub login, if any. The fix PR must be authored by this account. */
+  /** Fallback only: profile GitHub. Preferred source is report.githubLogin set at PR confirm. */
   githubLoginOf: (userId: string) => string | undefined;
 }
 
@@ -56,7 +56,8 @@ export const stamp = (r: StoredReport, txHash: string) => {
 /** First sighting of the merge. Mutates `r`; the caller decides whether to save it. */
 export async function runMergeCheck(ctx: SettlementContext, r: StoredReport): Promise<void> {
   if (r.status !== "funded" || !r.escrow?.pullRequest || !r.escrow.repo) throw new LedgerError("link a pull request first");
-  const author = r.githubLogin ?? ctx.githubLoginOf(r.researcherId);
+  if (!r.escrow.prConfirmed || !r.githubLogin) throw new LedgerError("confirm the pull request first");
+  const author = r.githubLogin;
   if (!ctx.live) {
     ledger.applyConfirmAnswer(r, await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, author), ctx.now());
     return;
@@ -80,12 +81,13 @@ export async function runMergeCheck(ctx: SettlementContext, r: StoredReport): Pr
 /** Second sighting and payout. Mutates `r`. */
 export async function runClaim(ctx: SettlementContext, r: StoredReport): Promise<void> {
   if (r.status !== "merge_confirmed" || !r.escrow?.pullRequest || !r.escrow.repo) throw new LedgerError("the merge has not been confirmed yet");
+  const author = r.githubLogin ?? ctx.githubLoginOf(r.researcherId);
   if (!ctx.live) {
-    ledger.applyPayoutAnswer(r, "researcher", await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, r.githubLogin ?? ctx.githubLoginOf(r.researcherId)), ctx.now());
+    ledger.applyPayoutAnswer(r, "researcher", await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, author), ctx.now());
     return;
   }
-  const seen = await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, r.githubLogin ?? ctx.githubLoginOf(r.researcherId));
-  if (seen.status !== "merged") throw new LedgerError("GitHub does not show this pull request merged by the researcher's linked GitHub account right now, so no payout was started.", 409);
+  const seen = await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, author);
+  if (seen.status !== "merged") throw new LedgerError("GitHub does not show this pull request merged by the expected author right now, so no payout was started.", 409);
   const done = await needRelay(ctx).call("researcher", "claim_payout", { report_id: r.id }, NEAR_CHECK_DEPOSIT, 300);
   const status = verdictOf(done.logs, "Payout");
   if (status === "merged" && !settled(done.logs, "Payout")) throw new ChainError("The payout transfer did not settle. Try claiming again.", 502);

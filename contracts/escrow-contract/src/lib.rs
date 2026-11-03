@@ -202,8 +202,9 @@ impl EscrowContract {
         emit("payout_account_set", json!({ "report_id": report_id, "payout_account": payout_account }));
     }
 
-    /// The researcher binds the GitHub account that must author the fixing pull request. The enclave checks
-    /// `merged && author == this login` itself. Allowed until the escrow is funded.
+    /// Legacy pre-fund binding of an expected GitHub author. Prefer `confirm_pull_request` after the team
+    /// submits the fix: that path locks both the PR number and the author the enclave must see.
+    /// Allowed only until the escrow is funded.
     pub fn set_researcher_github(&mut self, report_id: String, github_login: String) {
         let record = self.record(&report_id);
         self.require_researcher(&record);
@@ -315,7 +316,6 @@ impl EscrowContract {
         self.require_team(&record);
         require!(record.status == ReportStatus::TermsAccepted, "terms must be accepted before funding");
         require!(self.payouts.contains_key(&report_id), "set a payout account before funding");
-        require!(self.researcher_github.contains_key(&report_id), "bind the researcher's GitHub account before funding");
         let terms = record.terms.as_ref().expect("terms present");
         require!(env::attached_deposit().as_yoctonear() == terms.amount.0, "attach exactly the agreed amount");
         let now = env::block_timestamp();
@@ -336,17 +336,39 @@ impl EscrowContract {
 
     // ---------------------------------------------------------------- merge checks
 
-    /// The researcher points the escrow at the fix pull request in the agreed repository.
+    /// The team submits the fix pull request in the agreed repository. It stays replaceable until
+    /// the researcher confirms it. Confirmation locks the number and the expected GitHub author.
     pub fn link_pull_request(&mut self, report_id: String, pull_request: u64) {
         let mut record = self.record(&report_id);
-        self.require_researcher(&record);
+        self.require_team(&record);
         require!(record.status == ReportStatus::Funded, "escrow must be funded and not yet confirmed");
         require!(pull_request > 0, "pull request number must be positive");
+        require!(!self.researcher_github.contains_key(&report_id), "the pull request is locked after confirmation");
         let escrow = record.escrow.as_mut().expect("escrow present");
         require!(escrow.check_started_at_ns.is_none(), "a check is in flight");
         escrow.pull_request = Some(pull_request);
         self.save(&report_id, record);
         emit("pull_request_linked", json!({ "report_id": report_id, "pull_request": pull_request }));
+    }
+
+    /// The researcher confirms the submitted pull request and locks the GitHub author the enclave
+    /// must see on that PR (the person who wrote the fix — typically a team engineer, not the researcher).
+    pub fn confirm_pull_request(&mut self, report_id: String, expected_author: String) {
+        let record = self.record(&report_id);
+        self.require_researcher(&record);
+        require!(record.status == ReportStatus::Funded, "escrow must be funded and not yet confirmed");
+        let escrow = record.escrow.as_ref().expect("escrow present");
+        require!(escrow.pull_request.is_some(), "the team must submit a pull request first");
+        require!(escrow.check_started_at_ns.is_none(), "a check is in flight");
+        require!(!self.researcher_github.contains_key(&report_id), "the pull request is already confirmed");
+        let login = expected_author.trim().trim_start_matches('@').to_ascii_lowercase();
+        require!(valid_github_login(&login), "not a valid GitHub login");
+        let pull_request = escrow.pull_request.expect("pull request present");
+        self.researcher_github.insert(report_id.clone(), login.clone());
+        emit(
+            "pull_request_confirmed",
+            json!({ "report_id": report_id, "pull_request": pull_request, "expected_author": login }),
+        );
     }
 
     /// Anyone may ask the enclave to look at the pull request. The deposit pays for the run.
@@ -532,7 +554,7 @@ impl EscrowContract {
         self.payouts.get(&report_id).cloned().or_else(|| self.reports.get(&report_id).map(|r| r.researcher.clone()))
     }
 
-    /// The GitHub login the enclave must see as the pull request author.
+    /// Expected GitHub login for the confirmed fix pull request (set by `confirm_pull_request`).
     pub fn get_researcher_github(&self, report_id: String) -> Option<String> {
         self.researcher_github.get(&report_id).cloned()
     }
@@ -570,6 +592,10 @@ impl EscrowContract {
         let terms = record.terms.clone().expect("terms present");
         let escrow = record.escrow.as_mut().expect("escrow present");
         let pull_request = escrow.pull_request.unwrap_or_else(|| env::panic_str("link a pull request first"));
+        require!(
+            self.researcher_github.contains_key(report_id),
+            "confirm the pull request first"
+        );
         require!(
             escrow.check_started_at_ns.map_or(true, |t| now >= t + STALE_CHECK_NS),
             "a check is already in flight"

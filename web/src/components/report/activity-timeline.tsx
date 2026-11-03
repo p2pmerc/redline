@@ -18,6 +18,7 @@ export const kindIcon: Record<TimelineEvent["kind"], Icon> = {
   agreement_signed: Signature,
   escrow_funded: Coins,
   pr_linked: GitPullRequest,
+  pr_confirmed: Signature,
   pr_merged: GitMerge,
   payout: HandCoins,
   refund: ArrowUUpLeft,

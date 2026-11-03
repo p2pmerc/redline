@@ -41,6 +41,13 @@ export class ReportStore {
     this.flush();
   }
 
+  /** Remove a report permanently. Returns true when it existed. */
+  delete(id: string): boolean {
+    const ok = this.reports.delete(id);
+    if (ok) this.flush();
+    return ok;
+  }
+
   findInvite(token: string): { report: StoredReport; inviteId: string } | undefined {
     for (const report of this.reports.values()) {
       const invite = report.invites.find((i) => i.token === token && i.status !== "revoked");

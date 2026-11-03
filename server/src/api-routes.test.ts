@@ -35,6 +35,7 @@ beforeEach(async () => {
     enclave: { call: async (input) => { enclaveCalls.push(input); return { sealed_key: "sealed-answer" }; } },
     verifyToken: async (t) => { if (!t.startsWith("user-") && !t.startsWith("did:privy:")) throw new Error("bad"); return t; },
     mergeLookup: async () => answers.shift() ?? { status: "unknown" },
+    prAuthorLookup: async () => "fixwriter",
     accountExists: async (id) => id !== "ghost.testnet",
     now: () => new Date(clockMs),
   });
@@ -201,8 +202,12 @@ describe("escrow flow on the preview ledger", () => {
     await call("user-bob", "POST", `/reports/${id}/terms`, { amountNear: 5, repo: "acme/widgets" });
     await call("user-alice", "POST", `/reports/${id}/terms/accept`);
     await call("user-bob", "POST", `/reports/${id}/fund`);
-    expect((await call("user-alice", "POST", `/reports/${id}/pull-request`, { url: "https://github.com/evil/other/pull/1" })).status).toBe(400);
-    expect((await call("user-alice", "POST", `/reports/${id}/pull-request`, { url: "https://github.com/acme/widgets/pull/42" })).status).toBe(200);
+    expect((await call("user-alice", "POST", `/reports/${id}/pull-request`, { url: "https://github.com/acme/widgets/pull/42" })).status).toBe(403);
+    expect((await call("user-bob", "POST", `/reports/${id}/pull-request`, { url: "https://github.com/evil/other/pull/1" })).status).toBe(400);
+    expect((await call("user-bob", "POST", `/reports/${id}/pull-request`, { url: "https://github.com/acme/widgets/pull/42" })).status).toBe(200);
+    expect((await call("user-bob", "POST", `/reports/${id}/confirm-pull-request`)).status).toBe(403);
+    expect((await call("user-alice", "POST", `/reports/${id}/confirm-pull-request`)).status).toBe(200);
+    expect((await call("user-alice", "GET", `/reports/${id}`)).json.githubLogin).toBe("fixwriter");
 
     answers = [{ status: "unknown" }];
     expect((await call("user-bob", "POST", `/reports/${id}/check-merge`)).json.stage).toBe("funded");
@@ -233,7 +238,8 @@ describe("escrow flow on the preview ledger", () => {
     await call("user-bob", "POST", `/reports/${id}/terms`, { amountNear: 2, repo: "acme/widgets" });
     await call("user-alice", "POST", `/reports/${id}/terms/accept`);
     await call("user-bob", "POST", `/reports/${id}/fund`);
-    await call("user-alice", "POST", `/reports/${id}/pull-request`, { url: "https://github.com/acme/widgets/pull/7" });
+    await call("user-bob", "POST", `/reports/${id}/pull-request`, { url: "https://github.com/acme/widgets/pull/7" });
+    await call("user-alice", "POST", `/reports/${id}/confirm-pull-request`);
     expect((await call("user-bob", "POST", `/reports/${id}/refund`)).status).toBe(409);
     clockMs += 31 * 86_400_000;
     answers = [{ status: "merged", mergeCommit: "b".repeat(40) }];

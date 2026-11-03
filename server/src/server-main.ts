@@ -1,11 +1,11 @@
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import express from "express";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { createApiRouter } from "./api-routes.js";
 import { enclaveFromEnv } from "./enclave-client.js";
-import { createMergeLookup } from "./github-merge-lookup.js";
+import { createMergeLookup, createPrAuthorLookup } from "./github-merge-lookup.js";
 import { createPrivyVerifier } from "./privy-token-verifier.js";
 import { ReportStore } from "./report-store.js";
 import { ProfileStore } from "./profile-store.js";
@@ -51,7 +51,20 @@ export function startServer(config: ServerConfig = loadConfig()) {
     }
   }
   if (scrubbed) console.log(`removed server-side key copies from ${scrubbed} reports`);
-  const app = createApp({ config, store, profiles, walletAuth, enclave, verifyToken: combineVerifiers(walletAuth, createPrivyVerifier(config.privyAppId)), mergeLookup, relay, accountExists: createAccountChecker(process.env.NEAR_RPC_URL || undefined) });
+  // One-shot: drop the six tabtester seed copies so they never appear beside the real @p2pmerch reports.
+  const tabtesterFlag = config.dataFile ? path.join(path.dirname(config.dataFile), ".purged-tabtester-v1") : null;
+  const TABTESTER_IDS = [
+    "rl-c0721702dbf8", "rl-80de675eeb56", "rl-127be007d08f",
+    "rl-3d5ea8ddebcb", "rl-876a7a7563c3", "rl-d63157c7bc69",
+  ];
+  if (tabtesterFlag && !existsSync(tabtesterFlag)) {
+    let removed = 0;
+    for (const id of TABTESTER_IDS) if (store.delete(id)) removed += 1;
+    writeFileSync(tabtesterFlag, new Date().toISOString());
+    console.log(`purged ${removed} tabtester seed reports`);
+  }
+  const prAuthorLookup = createPrAuthorLookup(undefined, config.githubToken);
+  const app = createApp({ config, store, profiles, walletAuth, enclave, verifyToken: combineVerifiers(walletAuth, createPrivyVerifier(config.privyAppId)), mergeLookup, prAuthorLookup, relay, accountExists: createAccountChecker(process.env.NEAR_RPC_URL || undefined) });
   const githubLoginOf = (userId: string): string | undefined => githubLoginFromLink(profiles.get(userId)?.links.github);
   if (config.ledgerMode === "testnet" && relay && process.env.PAYOUT_AUTOMATION !== "off") {
     const pollMs = Number(process.env.PAYOUT_POLL_MS) || (config.githubToken ? 65_000 : 300_000);

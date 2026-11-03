@@ -208,6 +208,7 @@ export const acceptTerms = (id: string) => post(id, "terms/accept");
 export const fundEscrow = (id: string) => post(id, "fund");
 export const bindPayoutAccount = (id: string) => post(id, "payout-account");
 export const linkPullRequest = (id: string, url: string) => post(id, "pull-request", { url });
+export const confirmPullRequest = (id: string) => post(id, "confirm-pull-request");
 export const checkMerge = (id: string) => post(id, "check-merge");
 export const claimPayout = (id: string) => post(id, "claim");
 export const refundEscrow = (id: string) => post(id, "refund");

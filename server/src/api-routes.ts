@@ -7,7 +7,7 @@ import type { ReportStore } from "./report-store.js";
 import { ProfileStore, type ResearcherProfile } from "./profile-store.js";
 import type { InviteRecord, StoredReport, TimelineEntry } from "./report-records.js";
 import type { ServerConfig } from "./server-config.js";
-import type { MergeLookup } from "./github-merge-lookup.js";
+import type { MergeLookup, PrAuthorLookup } from "./github-merge-lookup.js";
 import * as ledger from "./escrow-ledger.js";
 import { LedgerError, type MergeAnswer } from "./escrow-ledger.js";
 import { isPublic, partyView, publicView, roleOf, summaryView, type PublicAuthor } from "./report-views.js";
@@ -24,6 +24,8 @@ export interface ApiDeps {
   profiles?: ProfileStore;
   verifyToken: TokenVerifier;
   mergeLookup: MergeLookup;
+  /** Resolves the GitHub author of a submitted fix PR (used at researcher confirm). */
+  prAuthorLookup?: PrAuthorLookup;
   /** Signs contract calls for the demo parties. Needed when the ledger mode is "testnet". */
   relay?: ChainRelay;
   /** Looks up a testnet account. Defaults to accepting well-formed ids when not given. */
@@ -567,21 +569,6 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     log(r, { kind: "payout_account", title: "Payout account set", detail: `${account}${live ? "" : " (preview ledger)"}`, txHash });
   };
 
-  /** Binds the researcher's GitHub login on chain. The enclave then requires merged && author == this login. */
-  const bindGithub = async (r: StoredReport) => {
-    if (r.githubLogin) return;
-    const login = githubLoginOf(r.researcherId);
-    if (!login) {
-      if (!live) return;
-      throw new LedgerError("Add your GitHub link to your profile first. The merged pull request must be authored by that account.");
-    }
-    if (!["registered", "terms_proposed", "terms_accepted"].includes(r.status)) throw new LedgerError("the GitHub account is locked once the escrow is funded");
-    let txHash: string | undefined;
-    if (live) txHash = (await needRelay().call("researcher", "set_researcher_github", { report_id: r.id, github_login: login })).txHash;
-    r.githubLogin = login.toLowerCase();
-    log(r, { kind: "payout_account", title: "Pull request author bound", detail: `@${r.githubLogin}${live ? "" : " (preview ledger)"}`, txHash });
-  };
-
   ledgerAction("payout-account", async (r, role) => {
     if (role !== "researcher") throw new LedgerError("only the researcher sets the payout account", 403);
     await bindPayout(r);
@@ -589,19 +576,29 @@ export function createApiRouter(deps: ApiDeps): express.Router {
 
   ledgerAction("terms/accept", async (r, role) => {
     if (role === "researcher" && profiles.get(r.researcherId)?.payoutAccount) await bindPayout(r);
-    if (role === "researcher" && githubLoginOf(r.researcherId)) await bindGithub(r);
     ledger.acceptTerms(r, role, clock());
     if (live) stamp(r, (await needRelay().call("researcher", "accept_terms", { report_id: r.id, terms_hash: termsHash(r) })).txHash);
   });
   ledgerAction("fund", async (r, role) => {
-    if (role === "team" && r.status === "terms_accepted") await bindGithub(r);
     ledger.fundEscrow(r, role, clock());
     if (live) stamp(r, (await needRelay().call("team", "fund_escrow", { report_id: r.id }, BigInt(yocto(r.terms!.amountNear)))).txHash);
   });
+  /** Team submits the fix PR URL. Must be in the agreed repo. Replaceable until confirmed. */
   ledgerAction("pull-request", async (r, role, req) => {
-    if (live && !githubLoginOf(r.researcherId)) throw new LedgerError("Add your GitHub link to your profile first. The merged pull request must be authored by that account.");
-    ledger.linkPullRequest(r, role, prBody.parse(req.body).url, clock());
-    if (live) stamp(r, (await needRelay().call("researcher", "link_pull_request", { report_id: r.id, pull_request: r.escrow!.pullRequest })).txHash);
+    if (role !== "team") throw new LedgerError("only the team submits the fix pull request", 403);
+    ledger.submitPullRequest(r, role, prBody.parse(req.body).url, clock());
+    if (live) stamp(r, (await needRelay().call("team", "link_pull_request", { report_id: r.id, pull_request: r.escrow!.pullRequest })).txHash);
+  });
+  /** Researcher confirms the submitted PR; expected author is the PR's GitHub author (not the researcher profile). */
+  ledgerAction("confirm-pull-request", async (r, role) => {
+    if (role !== "researcher") throw new LedgerError("only the researcher confirms the fix pull request", 403);
+    if (!r.escrow?.pullRequest || !r.escrow.repo) throw new LedgerError("the team must submit a pull request first");
+    if (r.escrow.prConfirmed) throw new LedgerError("the pull request is already confirmed");
+    const lookup = deps.prAuthorLookup;
+    const author = lookup ? await lookup(r.escrow.repo, r.escrow.pullRequest) : undefined;
+    if (!author) throw new LedgerError("Could not read the pull request author from GitHub. Check the link and try again.", 502);
+    ledger.confirmPullRequest(r, role, author, clock());
+    if (live) stamp(r, (await needRelay().call("researcher", "confirm_pull_request", { report_id: r.id, expected_author: author })).txHash);
   });
 
   ledgerAction("check-merge", async (r) => { await runMergeCheck(settlement, r); });

@@ -6,8 +6,8 @@ import type { ChainRelay } from "./chain-relay.js";
 const at = "2026-11-02T10:00:00.000Z";
 const report = (status: StoredReport["status"]): StoredReport => ({
   id: "rl-aaaaaaaaaaaa", researcherId: "u", researcherName: "R", title: "t", target: "", repo: "acme/w", severity: "high", summary: "",
-  createdAt: at, updatedAt: at, disclosureDeadline: at, contentHash: "a".repeat(64), ciphertextHex: "00", status, payoutAccount: "r.testnet",
-  escrow: { amountNear: 1, fundedAt: at, expiresAt: at, repo: "acme/w", pullRequest: 1, pullRequestUrl: "u", mergeCheck: "pending" },
+  createdAt: at, updatedAt: at, disclosureDeadline: at, contentHash: "a".repeat(64), ciphertextHex: "00", status, payoutAccount: "r.testnet", githubLogin: "p2pmerc",
+  escrow: { amountNear: 1, fundedAt: at, expiresAt: at, repo: "acme/w", pullRequest: 1, pullRequestUrl: "u", prConfirmed: true, mergeCheck: "pending" },
   invites: [], messages: [], timeline: [],
 });
 
@@ -29,7 +29,7 @@ describe("live settlement checks the PR author before spending the enclave", () 
 
   it("refuses to start a payout when the merge or author is not confirmed", async () => {
     const { ctx, calls } = setup(async () => ({ status: "unknown" }));
-    await expect(runClaim(ctx, report("merge_confirmed"))).rejects.toThrow(/linked GitHub/);
+    await expect(runClaim(ctx, report("merge_confirmed"))).rejects.toThrow(/expected author/);
     expect(calls).toEqual([]);
   });
 

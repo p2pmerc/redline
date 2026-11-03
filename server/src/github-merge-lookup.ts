@@ -47,7 +47,7 @@ export function createMergeLookup(fetcher: Fetcher = fetch as unknown as Fetcher
         const login = typeof pr.body.user?.login === "string" ? pr.body.user.login.replace(/^@/, "").toLowerCase() : "";
         if (!login) return unknown("pull request has no author login");
         if (login !== wantedAuthor) {
-          return unknown(`pull request author @${login} does not match the researcher's linked GitHub @${wantedAuthor}`);
+          return unknown(`pull request author @${login} does not match the expected author @${wantedAuthor}`);
         }
       }
 
@@ -68,6 +68,26 @@ export function createMergeLookup(fetcher: Fetcher = fetch as unknown as Fetcher
       return unknown("incomplete answer from GitHub");
     } catch {
       return unknown("GitHub did not answer");
+    }
+  };
+}
+
+/** Reads only the PR author login. Used when the researcher confirms a submitted fix. */
+export type PrAuthorLookup = (repo: string, pullRequest: number) => Promise<string | undefined>;
+
+export function createPrAuthorLookup(fetcher: Fetcher = fetch as unknown as Fetcher, token?: string): PrAuthorLookup {
+  const headers: Record<string, string> = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "redline-pr-author" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return async (repo, pullRequest) => {
+    if (!REPO_PATTERN.test(repo) || !Number.isInteger(pullRequest) || pullRequest <= 0) return undefined;
+    try {
+      const res = await fetcher(`https://api.github.com/repos/${repo}/pulls/${pullRequest}`, { headers });
+      if (res.status !== 200) return undefined;
+      const body = ((await res.json().catch(() => ({}))) ?? {}) as Obj;
+      const login = typeof body.user?.login === "string" ? body.user.login.replace(/^@/, "").toLowerCase() : "";
+      return login || undefined;
+    } catch {
+      return undefined;
     }
   };
 }

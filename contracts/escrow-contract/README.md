@@ -10,7 +10,7 @@ NEAR contract (near-sdk 5) that holds a bounty and releases it only after an Out
 - A failed transfer restores the previous state.
 
 ## Methods
-`register_report`, `set_team_account`, `post_message_hash`, `propose_terms`, `accept_terms`, `fund_escrow`, `link_pull_request`, `request_merge_check`, `claim_payout`, `refund_after_expiry`, `emergency_refund`, `publish_report`, `update_enclave_source`, views `get_report` and `get_config`. Callbacks: `on_merge_check`, `on_transfer_settled`.
+`register_report`, `set_team_account`, `post_message_hash`, `propose_terms`, `accept_terms`, `fund_escrow`, `link_pull_request` (team submits), `confirm_pull_request` (researcher locks PR + expected author), `request_merge_check`, `claim_payout`, `refund_after_expiry`, `emergency_refund`, `publish_report`, `update_enclave_source`, views `get_report` and `get_config`. Callbacks: `on_merge_check`, `on_transfer_settled`.
 
 ## Develop
 ```

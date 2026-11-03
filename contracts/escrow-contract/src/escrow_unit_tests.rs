@@ -50,15 +50,22 @@ fn registered() -> EscrowContract {
 }
 
 fn funded() -> EscrowContract {
-    let mut c = registered();
+    let mut c = new_contract();
+    ctx(researcher(), fee(), START);
+    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, None);
+    ctx(researcher(), 0, START);
+    c.set_team_account(REPORT.into(), team());
+    c.set_payout_account(REPORT.into(), wallet());
     ctx(team(), 0, START);
     c.propose_terms(REPORT.into(), U128(AMOUNT), "acme/widgets".into(), TERMS.into());
     ctx(researcher(), 0, START);
     c.accept_terms(REPORT.into(), TERMS.into());
     ctx(team(), AMOUNT, START);
     c.fund_escrow(REPORT.into());
-    ctx(researcher(), 0, START);
+    ctx(team(), 0, START);
     c.link_pull_request(REPORT.into(), 42);
+    ctx(researcher(), 0, START);
+    c.confirm_pull_request(REPORT.into(), "p2pmerc".into());
     c
 }
 
@@ -739,8 +746,7 @@ fn only_the_researcher_binds_the_github_login() {
 }
 
 #[test]
-#[should_panic(expected = "bind the researcher's GitHub account before funding")]
-fn funding_is_blocked_until_a_github_account_is_bound() {
+fn funding_no_longer_requires_a_github_author_binding() {
     let mut c = new_contract();
     ctx(researcher(), fee(), START);
     c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, Some(wallet()));
@@ -752,6 +758,55 @@ fn funding_is_blocked_until_a_github_account_is_bound() {
     c.accept_terms(REPORT.into(), TERMS.into());
     ctx(team(), AMOUNT, START);
     c.fund_escrow(REPORT.into());
+    assert_eq!(status(&c), ReportStatus::Funded);
+}
+
+#[test]
+#[should_panic(expected = "confirm the pull request first")]
+fn merge_check_needs_a_confirmed_pull_request() {
+    let mut c = new_contract();
+    ctx(researcher(), fee(), START);
+    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, None);
+    ctx(researcher(), 0, START);
+    c.set_team_account(REPORT.into(), team());
+    c.set_payout_account(REPORT.into(), wallet());
+    ctx(team(), 0, START);
+    c.propose_terms(REPORT.into(), U128(AMOUNT), "acme/widgets".into(), TERMS.into());
+    ctx(researcher(), 0, START);
+    c.accept_terms(REPORT.into(), TERMS.into());
+    ctx(team(), AMOUNT, START);
+    c.fund_escrow(REPORT.into());
+    ctx(team(), 0, START);
+    c.link_pull_request(REPORT.into(), 42);
+    ctx(researcher(), fee(), START);
+    let _ = c.request_merge_check(REPORT.into());
+}
+
+#[test]
+#[should_panic(expected = "only the team")]
+fn only_the_team_submits_the_pull_request() {
+    let mut c = new_contract();
+    ctx(researcher(), fee(), START);
+    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, None);
+    ctx(researcher(), 0, START);
+    c.set_team_account(REPORT.into(), team());
+    c.set_payout_account(REPORT.into(), wallet());
+    ctx(team(), 0, START);
+    c.propose_terms(REPORT.into(), U128(AMOUNT), "acme/widgets".into(), TERMS.into());
+    ctx(researcher(), 0, START);
+    c.accept_terms(REPORT.into(), TERMS.into());
+    ctx(team(), AMOUNT, START);
+    c.fund_escrow(REPORT.into());
+    ctx(researcher(), 0, START);
+    c.link_pull_request(REPORT.into(), 42);
+}
+
+#[test]
+#[should_panic(expected = "the pull request is locked after confirmation")]
+fn confirmed_pull_request_cannot_be_replaced() {
+    let mut c = funded();
+    ctx(team(), 0, START);
+    c.link_pull_request(REPORT.into(), 99);
 }
 
 #[test]

@@ -13,7 +13,7 @@ export interface AutomationOptions {
 }
 
 /**
- * Pays researchers without anyone pressing "check". Every funded report with a linked pull request is
+ * Pays researchers without anyone pressing "check". Every funded report with a confirmed fix pull request is
  * looked at on GitHub (one cheap read, author-checked). Only when GitHub shows the merge does it run the
  * two enclave checks and the payout through the same code the buttons use.
  */
@@ -33,7 +33,7 @@ export function createPayoutAutomation(options: AutomationOptions) {
   };
 
   const watched = (r: StoredReport) =>
-    (r.status === "funded" || r.status === "merge_confirmed") && !!r.escrow?.pullRequest && !!r.escrow.repo;
+    (r.status === "funded" || r.status === "merge_confirmed") && !!r.escrow?.pullRequest && !!r.escrow.repo && !!r.escrow.prConfirmed && !!r.githubLogin;
 
   /** Work one report as far as it can go right now. */
   async function settle(id: string): Promise<void> {

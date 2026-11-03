@@ -9,8 +9,8 @@ function funded(id: string): StoredReport {
   return {
     id, researcherId: "user-a", researcherName: "A", title: "t", target: "", repo: "acme/widgets", severity: "high", summary: "",
     createdAt: at, updatedAt: at, disclosureDeadline: "2027-01-01T00:00:00.000Z", contentHash: "a".repeat(64), ciphertextHex: "00",
-    status: "funded", payoutAccount: "a.testnet", terms: { amountNear: 1, repo: "acme/widgets", proposedBy: "team", researcherAccepted: true } as never,
-    escrow: { amountNear: 1, fundedAt: at, expiresAt: "2026-12-01T00:00:00.000Z", repo: "acme/widgets", pullRequest: 1, pullRequestUrl: "https://github.com/acme/widgets/pull/1", mergeCheck: "pending" },
+    status: "funded", payoutAccount: "a.testnet", githubLogin: "p2pmerc", terms: { amountNear: 1, repo: "acme/widgets", proposedBy: "team", researcherAccepted: true } as never,
+    escrow: { amountNear: 1, fundedAt: at, expiresAt: "2026-12-01T00:00:00.000Z", repo: "acme/widgets", pullRequest: 1, pullRequestUrl: "https://github.com/acme/widgets/pull/1", prConfirmed: true, mergeCheck: "pending" },
     invites: [], messages: [], timeline: [],
   };
 }
