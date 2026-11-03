@@ -7,15 +7,18 @@ import type { StoredReport, TimelineEntry } from "./report-records.js";
 import type { ServerConfig } from "./server-config.js";
 import type { MergeLookup } from "./github-merge-lookup.js";
 import * as ledger from "./escrow-ledger.js";
-import { LedgerError } from "./escrow-ledger.js";
+import { LedgerError, type MergeAnswer } from "./escrow-ledger.js";
 import { partyView, publicView, roleOf, summaryView } from "./report-views.js";
 import { openCiphertext } from "./report-ciphertext.js";
+import { ChainError, type ChainRelay } from "./chain-relay.js";
 
 export interface ApiDeps {
   config: ServerConfig;
   store: ReportStore;
   verifyToken: TokenVerifier;
   mergeLookup: MergeLookup;
+  /** Signs contract calls for the demo parties. Needed when the ledger mode is "testnet". */
+  relay?: ChainRelay;
   now?: () => Date;
 }
 
@@ -44,12 +47,19 @@ class HttpError extends Error {
 }
 
 const sha256 = (hexString: string) => createHash("sha256").update(Buffer.from(hexString, "hex")).digest("hex");
-const newId = () => `rl_${randomBytes(6).toString("hex")}`;
+const NEAR_FEE = 10n ** 22n; // 0.01 NEAR registration storage fee
+const NEAR_CHECK_DEPOSIT = 5n * 10n ** 22n; // 0.05 NEAR pays for one enclave run, the unused part is refunded
+const newId = () => `rl-${randomBytes(6).toString("hex")}`;
 
 type AuthedRequest = Request & { caller: Caller };
 
 export function createApiRouter(deps: ApiDeps): express.Router {
-  const { config, store, verifyToken, mergeLookup } = deps;
+  const { config, store, verifyToken, mergeLookup, relay } = deps;
+  const live = config.ledgerMode === "testnet";
+  const needRelay = (): ChainRelay => {
+    if (!relay) throw new HttpError(501, "The testnet contract is not connected yet.");
+    return relay;
+  };
   const clock = deps.now ?? (() => new Date());
   const router = express.Router();
   const contractId = config.ledgerMode === "preview" ? "Preview ledger" : config.escrowContractId;
@@ -117,7 +127,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     res.json({ reports: items });
   });
 
-  router.post("/reports", (req, res) => {
+  router.post("/reports", handler(async (req, res) => {
     const input = createReportBody.parse(req.body);
     if (sha256(input.ciphertextHex) !== input.contentHash.toLowerCase()) throw new HttpError(400, "The content hash does not match the ciphertext.");
     if (input.ciphertextHex.length < 2 * (12 + 16 + 1)) throw new HttpError(400, "That does not look like a sealed report.");
@@ -142,10 +152,20 @@ export function createApiRouter(deps: ApiDeps): express.Router {
       messages: [],
       timeline: [],
     };
-    log(report, { kind: "sealed", title: "Report sealed", detail: `Hash ${report.contentHash.slice(0, 12)}…`, txHash: ledger.previewTxHash(report.id, "register") });
+    let sealTx = ledger.previewTxHash(report.id, "register");
+    if (live) {
+      const chain = needRelay();
+      // The contract wants the disclosure date at least 7 days past the block time.
+      const day = 86_400_000;
+      const deadlineMs = Math.min(Math.max(new Date(report.disclosureDeadline).getTime(), now.getTime() + 7 * day + 3_600_000), now.getTime() + 364 * day);
+      const registered = await chain.call("researcher", "register_report", { report_id: report.id, content_hash: report.contentHash, disclosure_deadline_ns: String(BigInt(deadlineMs) * 1_000_000n) }, NEAR_FEE);
+      await chain.call("researcher", "set_team_account", { report_id: report.id, team: chain.teamAccountId });
+      sealTx = registered.txHash;
+    }
+    log(report, { kind: "sealed", title: "Report sealed", detail: `Hash ${report.contentHash.slice(0, 12)}…`, txHash: sealTx });
     store.insert(report);
     res.status(201).json(view(report, "researcher"));
-  });
+  }));
 
   router.get("/reports/:id", (req, res) => {
     const { report, role } = party(req);
@@ -235,7 +255,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
   const ledgerAction = (name: string, run: (report: StoredReport, role: "researcher" | "team", req: Request) => Promise<void> | void) =>
     router.post(`/reports/:id/${name}`, handler(async (req, res) => {
       const { report, role } = party(req);
-      if (config.ledgerMode !== "preview") throw new HttpError(501, "The testnet contract is not connected yet.");
+      if (live) needRelay();
       // Work on a copy so a failed transition leaves the stored record untouched.
       const draft = structuredClone(report);
       await run(draft, role, req);
@@ -243,33 +263,86 @@ export function createApiRouter(deps: ApiDeps): express.Router {
       res.json(view(draft, role));
     }));
 
-  ledgerAction("terms", (r, role, req) => {
+  /** In live mode: record the real transaction on the newest timeline entry and drop the preview wording. */
+  const stamp = (r: StoredReport, txHash: string) => {
+    const last = r.timeline[r.timeline.length - 1];
+    if (!last) return;
+    last.txHash = txHash;
+    if (last.detail) last.detail = last.detail.replace(/\s*\(preview ledger[^)]*\)/, "");
+  };
+  const yocto = (near: number) => String(BigInt(Math.round(near * 1_000_000)) * 10n ** 18n);
+  const termsHash = (r: StoredReport) => createHash("sha256").update(`${r.id}|${r.terms?.amountNear}|${r.terms?.repo}`).digest("hex");
+  const verdictOf = (logs: string[], phase: string): MergeAnswer["status"] => {
+    for (const line of logs) {
+      const m = /^EVENT_JSON:(.*)$/.exec(line);
+      if (!m) continue;
+      try {
+        const ev = JSON.parse(m[1]!) as { standard?: string; event?: string; data?: { phase?: string; verdict?: string } };
+        if (ev.standard === "redline" && ev.event === "merge_checked" && ev.data?.phase === phase) {
+          return ev.data.verdict === "Merged" ? "merged" : ev.data.verdict === "NotMerged" ? "not_merged" : "unknown";
+        }
+      } catch { /* not ours */ }
+    }
+    return "unknown";
+  };
+  const settled = (logs: string[], kind: string) => logs.some((l) => l.includes('"event":"transfer_settled"') && l.includes(`"kind":"${kind}"`));
+
+  ledgerAction("terms", async (r, role, req) => {
     const input = termsBody.parse(req.body);
     ledger.proposeTerms(r, role, input.amountNear, input.repo, clock());
+    if (live) stamp(r, (await needRelay().call("team", "propose_terms", { report_id: r.id, amount: yocto(input.amountNear), repo: input.repo, terms_hash: termsHash(r) })).txHash);
   });
-  ledgerAction("terms/accept", (r, role) => ledger.acceptTerms(r, role, clock()));
-  ledgerAction("fund", (r, role) => ledger.fundEscrow(r, role, clock()));
-  ledgerAction("pull-request", (r, role, req) => ledger.linkPullRequest(r, role, prBody.parse(req.body).url, clock()));
+  ledgerAction("terms/accept", async (r, role) => {
+    ledger.acceptTerms(r, role, clock());
+    if (live) stamp(r, (await needRelay().call("researcher", "accept_terms", { report_id: r.id, terms_hash: termsHash(r) })).txHash);
+  });
+  ledgerAction("fund", async (r, role) => {
+    ledger.fundEscrow(r, role, clock());
+    if (live) stamp(r, (await needRelay().call("team", "fund_escrow", { report_id: r.id }, BigInt(yocto(r.terms!.amountNear)))).txHash);
+  });
+  ledgerAction("pull-request", async (r, role, req) => {
+    ledger.linkPullRequest(r, role, prBody.parse(req.body).url, clock());
+    if (live) stamp(r, (await needRelay().call("researcher", "link_pull_request", { report_id: r.id, pull_request: r.escrow!.pullRequest })).txHash);
+  });
 
   ledgerAction("check-merge", async (r) => {
     if (r.status !== "funded" || !r.escrow?.pullRequest || !r.escrow.repo) throw new LedgerError("link a pull request first");
-    const answer = await mergeLookup(r.escrow.repo, r.escrow.pullRequest);
+    if (!live) {
+      ledger.applyConfirmAnswer(r, await mergeLookup(r.escrow.repo, r.escrow.pullRequest), clock());
+      return;
+    }
+    // The enclave inside OutLayer looks at GitHub and the contract records its answer.
+    const done = await needRelay().call("team", "request_merge_check", { report_id: r.id }, NEAR_CHECK_DEPOSIT, 300);
+    const answer: MergeAnswer = { status: verdictOf(done.logs, "Confirm"), repo: r.escrow.repo, pullRequest: r.escrow.pullRequest };
+    if (answer.status === "merged") answer.mergeCommit = (await mergeLookup(r.escrow.repo, r.escrow.pullRequest).catch(() => undefined))?.mergeCommit;
     ledger.applyConfirmAnswer(r, answer, clock());
+    if (answer.status === "merged") stamp(r, done.txHash);
   });
 
   ledgerAction("claim", async (r, role) => {
     if (role !== "researcher") throw new LedgerError("only the researcher can claim", 403);
     if (r.status !== "merge_confirmed" || !r.escrow?.pullRequest || !r.escrow.repo) throw new LedgerError("the merge has not been confirmed yet");
-    const answer = await mergeLookup(r.escrow.repo, r.escrow.pullRequest);
-    ledger.applyPayoutAnswer(r, role, answer, clock());
+    if (!live) {
+      ledger.applyPayoutAnswer(r, role, await mergeLookup(r.escrow.repo, r.escrow.pullRequest), clock());
+      return;
+    }
+    const done = await needRelay().call("researcher", "claim_payout", { report_id: r.id }, NEAR_CHECK_DEPOSIT, 300);
+    const status = verdictOf(done.logs, "Payout");
+    if (status === "merged" && !settled(done.logs, "Payout")) throw new ChainError("The payout transfer did not settle. Try claiming again.", 502);
+    if (ledger.applyPayoutAnswer(r, role, { status }, clock())) stamp(r, done.txHash);
   });
 
   ledgerAction("refund", async (r, role) => {
     if (role !== "team") throw new LedgerError("only the team can refund", 403);
     if (!ledger.canRefund(r, clock())) throw new LedgerError("the escrow has not expired, or there is nothing to refund");
     const e = r.escrow!;
-    const answer: ledger.MergeAnswer = e.pullRequest && e.repo ? await mergeLookup(e.repo, e.pullRequest) : { status: "not_merged" };
-    ledger.applyRefundAnswer(r, role, answer, clock());
+    if (!live) {
+      const answer: ledger.MergeAnswer = e.pullRequest && e.repo ? await mergeLookup(e.repo, e.pullRequest) : { status: "not_merged" };
+      ledger.applyRefundAnswer(r, role, answer, clock());
+      return;
+    }
+    const done = await needRelay().call("team", "refund_after_expiry", { report_id: r.id }, NEAR_CHECK_DEPOSIT, 300);
+    if (ledger.applyRefundAnswer(r, role, { status: verdictOf(done.logs, "Refund") }, clock())) stamp(r, done.txHash);
   });
 
   router.post("/reports/:id/publish", (req, res) => {

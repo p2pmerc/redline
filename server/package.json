@@ -15,6 +15,7 @@
     "express-rate-limit": "^8.0.0",
     "helmet": "^8.1.0",
     "jose": "^6.1.0",
+    "near-api-js": "^7.4.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {

@@ -5,7 +5,7 @@ export interface ServerConfig {
   dataFile: string | null;
   webDist: string;
   privyAppId: string;
-  /** "preview" runs the escrow state machine on the server. "testnet" is reserved for the deployed contract. */
+  /** "preview" runs the escrow state machine on the server. "testnet" also mirrors each step on the deployed contract. */
   ledgerMode: "preview" | "testnet";
   escrowContractId: string;
   enclavePublicKey: string;
