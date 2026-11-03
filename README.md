@@ -38,6 +38,133 @@ Tracks this fits: `privacy`, `security`, and `realworld`.
 5. Link a fix PR in the reported repo and merge it under the expected GitHub login → the enclave merge check returns `merged` and the contract pays the researcher's payout account. No manual "claim" click is required once the poller sees the result.
 6. Open `/disclosures` → paid / published reports appear publicly; sealed ones never do.
 
+## For AI agents
+
+Redline has a read-only JSON API at `/api/v1`. It needs no account, no API key and no SDK. Every response is JSON, CORS is open (`*`), nothing is cached by clients (`Cache-Control: no-store`), and any method other than `GET` returns `405`. There is also an `llms.txt` and a machine-readable manifest.
+
+Live base URL: `https://redline-app-production-b0e6.up.railway.app` (NEAR testnet, `redline-escrow.testnet`).
+
+| Endpoint | What it gives you |
+| --- | --- |
+| `GET /api/v1` | Index of the endpoints below. |
+| `GET /api/v1/disclosures?status=paid&limit=20&offset=0` | Public list: id, title, repo, severity, bounty, PR URL, fund and payout tx hashes, links. |
+| `GET /api/v1/disclosures/:id` | One public disclosure: the list fields plus summary, body (only if the researcher unsealed it), merge commit, proof (contract, content hash, enclave info) and a public timeline. |
+| `GET /api/v1/reports/:id` | Any report, public or private. With no token you get metadata and hashes only. |
+| `GET /api/v1/verify/:id` | Re-checks a public report live: the contract record, the GitHub merge, the fund transaction and the payout transaction. Limited to 20 calls a minute, cached for 60 s. |
+| `GET /llms.txt`, `GET /.well-known/redline.json` | Discovery for agents. |
+
+### Copy-paste examples (run against the live app)
+
+```bash
+U=https://redline-app-production-b0e6.up.railway.app
+
+# 1. What has been paid or published?
+curl -s "$U/api/v1/disclosures?limit=5"
+
+# 2. One disclosure with its proof and timeline
+curl -s "$U/api/v1/disclosures/rl-6f0812c1a1a5"
+
+# 3. A private report, no token: hashes only
+curl -s "$U/api/v1/reports/rl-18048f44fdcc"
+
+# 4. A wrong token is a JSON 401 (a valid token of a non-party is a JSON 403)
+curl -s -H "Authorization: Bearer not-a-real-token" "$U/api/v1/reports/rl-18048f44fdcc"
+
+# 5. Check the escrow, merge and payout yourself
+curl -s "$U/api/v1/verify/rl-6f0812c1a1a5"
+
+# 6. Discovery
+curl -s "$U/api/v1"
+curl -s "$U/llms.txt"
+curl -s "$U/.well-known/redline.json"
+```
+
+Real responses (trimmed with `…`):
+
+`GET /api/v1/disclosures/rl-6f0812c1a1a5`
+
+```json
+{
+  "id": "rl-6f0812c1a1a5",
+  "title": "SQL injection in /invoices customer filter",
+  "repo": "p2pmerc/invoice-lookup",
+  "severity": "critical",
+  "status": "paid",
+  "outcome": "fixed_and_paid",
+  "bountyNear": 0.4,
+  "pullRequestUrl": "https://github.com/p2pmerc/invoice-lookup/pull/1",
+  "bodyPublished": false,
+  "fundTxHash": "BvH8tWMu591KRtNFVoCBpPE7DQ35a9YuX4YS1EYdejJt",
+  "payoutTxHash": "F5WfvycCBUzeGhXA8PYNqCjVsNGM9EFHeUif1KYnMd1H",
+  "body": "",
+  "bodyNote": "The researcher has not unsealed the body. It stays encrypted; only the summary and the payout are public.",
+  "mergeCommit": "c871da40915b6251d2d318a7b78973211a003cbb",
+  "proof": { "contractId": "redline-escrow.testnet", "contentHash": "1306f76b…c3af", "enclave": { "projectId": "redline-escrow.testnet/redline-enclave", "wasmSha256": "eee38f53…1468", "pinnedOnChain": true } },
+  "timeline": [ … ]
+}
+```
+
+`GET /api/v1/reports/rl-18048f44fdcc` (private, no token)
+
+```json
+{
+  "access": "metadata_only",
+  "report": {
+    "id": "rl-18048f44fdcc",
+    "stage": "negotiating",
+    "severity": "high",
+    "createdAt": "2026-11-03T07:10:49.926Z",
+    "disclosureDeadline": "2027-02-01T07:10:49.926Z",
+    "contentHash": "0138451eb4f985e4f63e74f7f9c21ed42b106db79f083c4eee5b8f4d0e3b297f",
+    "ciphertextBytes": 2766,
+    "hasSealedKey": true,
+    "messageCount": 4
+  },
+  "onChain": { "contractId": "redline-escrow.testnet", "contractUrl": "https://testnet.nearblocks.io/address/redline-escrow.testnet" },
+  "enclave": { "projectId": "redline-escrow.testnet/redline-enclave", "wasmSha256": "eee38f53…1468", "pinnedOnChain": true, … },
+  "note": "This report is private. Title, summary, body, chat and parties are hidden. Send a Bearer token of a party to see the encrypted record."
+}
+```
+
+`GET /api/v1/reports/rl-18048f44fdcc` with a bad token
+
+```json
+{ "error": "The bearer token is missing, expired or invalid.", "code": "invalid_token" }
+```
+
+`GET /api/v1/verify/rl-6f0812c1a1a5` (checks trimmed, captured live)
+
+```json
+{
+  "id": "rl-6f0812c1a1a5",
+  "verdict": "partial",
+  "checks": [
+    { "name": "onchain.content_hash", "ok": true, "detail": "the sealed ciphertext hash on chain equals the one served here" },
+    { "name": "onchain.status", "ok": true, "detail": "chain says Paid, the app says paid" },
+    { "name": "onchain.amount", "ok": true, "detail": "the agreed amount on chain matches the bounty" },
+    { "name": "github.merged", "ok": null, "detail": "GitHub reports the pull request as unknown" },
+    { "name": "tx.escrow_funded", "ok": true, "detail": "fund_escrow succeeded on redline-escrow.testnet" },
+    { "name": "tx.payout", "ok": true, "detail": "claim_payout succeeded and a transfer of the bounty reached p2pmerch.redline-escrow.testnet" }
+  ],
+  "transactions": [
+    { "kind": "payout", "txHash": "F5WfvycCBUzeGhXA8PYNqCjVsNGM9EFHeUif1KYnMd1H", "success": true, "signer": "researcher.redline-escrow.testnet", "methods": ["claim_payout"], "transfers": [{ "to": "p2pmerch.redline-escrow.testnet", "amountNear": 0.4 }], "verified": true }
+  ]
+}
+```
+
+`verdict` is `verified` when every check passes, `partial` when none failed but some could not be read (for example GitHub rate-limited the server, `ok: null`), and `mismatch` when a check fails. An agent should not trust the server's word: `fundTxHash` and `payoutTxHash` are NEAR testnet hashes you can look up on any explorer or RPC, and the enclave `wasmSha256` is the value the contract pins on chain.
+
+Other errors are `404 not_public` (disclosure and verify only know public reports), `404 not_found`, `400 invalid_id` (ids look like `rl-0123456789ab`), `405 method_not_allowed`, `429 rate_limited` on `/verify`.
+
+### Security model: what a caller can and cannot see
+
+- **Anonymous caller, public report** (`paid` or `published`): title, summary, repo, severity, bounty, PR URL, tx hashes, merge commit, public timeline and proof fields. The body is empty unless the researcher unsealed it after the disclosure deadline.
+- **Anonymous caller, private report**: only `id`, `stage`, `severity`, `createdAt`, `disclosureDeadline`, the ciphertext hash and size, whether a sealed key exists, a message count and the enclave info. Title, summary, parties, chat and body are hidden, so an id alone reveals nothing about what is wrong or in which product.
+- **Wrong or expired token**: `401 invalid_token`. **Valid token that is not a party to the report**: `403 forbidden`. The same private metadata is never leaked through the error.
+- **A party's token**: the encrypted record. Even then the API never returns the report key, the plaintext, or invitee emails (invite handles are shown as "Security team"). Plaintext only comes out of the OutLayer TEE enclave after the contract confirms the caller is a listed party; the key is sealed to the enclave public key, and the server never holds it.
+- The API cannot write. There are no POST routes under `/api/v1`, so an agent cannot fund, merge, claim or publish anything through it.
+- Everything money-related is checkable off-platform: the contract `redline-escrow.testnet` (`get_report`, `get_config`) and the explorer links in each response.
+
 ## Screenshots
 
 A real report taken all the way through on testnet: sealed, funded, fix PR merged, paid by the enclave check.
