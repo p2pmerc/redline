@@ -19,7 +19,7 @@ use near_sdk::{
 };
 
 use escrow_events::emit;
-use outlayer_interface::{ext_outlayer, MergeCheckAnswer};
+use outlayer_interface::{ext_outlayer, AnswerEnvelope, MergeCheckAnswer};
 pub use report_types::*;
 
 const DAY_NS: u64 = 86_400_000_000_000;
@@ -501,7 +501,7 @@ impl EscrowContract {
 /// Reads the enclave answer. Everything unexpected counts as `Unknown`, never as `Merged`.
 fn verdict_for(record: &ReportRecord, result: Result<Option<String>, PromiseError>) -> Verdict {
     let Ok(Some(raw)) = result else { return Verdict::Unknown };
-    let Ok(answer) = near_sdk::serde_json::from_str::<MergeCheckAnswer>(&raw) else { return Verdict::Unknown };
+    let Some(answer) = parse_answer(&raw) else { return Verdict::Unknown };
     let (Some(terms), Some(escrow)) = (record.terms.as_ref(), record.escrow.as_ref()) else { return Verdict::Unknown };
     if !answer.repo.eq_ignore_ascii_case(&terms.repo) || Some(answer.pull_request) != escrow.pull_request {
         return Verdict::Unknown;
@@ -511,6 +511,14 @@ fn verdict_for(record: &ReportRecord, result: Result<Option<String>, PromiseErro
         "not_merged" => Verdict::NotMerged,
         _ => Verdict::Unknown,
     }
+}
+
+/// Accepts the bare answer or the worker's `{"success":true,"result":{...}}` envelope.
+fn parse_answer(raw: &str) -> Option<MergeCheckAnswer> {
+    if let Ok(answer) = near_sdk::serde_json::from_str::<MergeCheckAnswer>(raw) {
+        return Some(answer);
+    }
+    near_sdk::serde_json::from_str::<AnswerEnvelope>(raw).ok().filter(|e| e.success).map(|e| e.result)
 }
 
 fn valid_report_id(id: &str) -> bool {

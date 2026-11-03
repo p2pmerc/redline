@@ -61,3 +61,11 @@ pub struct MergeCheckAnswer {
     #[serde(default)]
     pub merge_commit: Option<String>,
 }
+
+/// The worker wraps most outputs as `{"success": true, "result": ...}`.
+#[derive(near_sdk::serde::Deserialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct AnswerEnvelope {
+    pub success: bool,
+    pub result: MergeCheckAnswer,
+}

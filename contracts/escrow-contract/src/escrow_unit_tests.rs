@@ -338,6 +338,22 @@ fn a_merged_answer_without_a_commit_is_not_trusted() {
 }
 
 #[test]
+fn the_worker_envelope_is_accepted() {
+    let mut c = funded();
+    let wrapped = format!(r#"{{"success":true,"result":{}}}"#, merged_answer());
+    answer(&mut c, CheckPhase::Confirm, Some(wrapped), START + 100);
+    assert_eq!(status(&c), ReportStatus::MergeConfirmed);
+}
+
+#[test]
+fn a_failed_envelope_is_unknown() {
+    let mut c = funded();
+    let wrapped = format!(r#"{{"success":false,"result":{}}}"#, merged_answer());
+    answer(&mut c, CheckPhase::Confirm, Some(wrapped), START + 100);
+    assert_eq!(status(&c), ReportStatus::Funded);
+}
+
+#[test]
 fn garbage_output_is_unknown() {
     let mut c = funded();
     answer(&mut c, CheckPhase::Confirm, Some("not json at all".into()), START + 100);
