@@ -13,7 +13,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import Link from "next/link";
+import { Link as RouterLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { fontWeights } from "@/lib/font-weight";
 import { useShape } from "@/lib/shape-context";
@@ -21,6 +21,15 @@ import { SizeProvider, useSize, typeClass, type SizeVariant } from "@/lib/size-c
 import { useIcons, type IconComponent } from "@/lib/icon-context";
 import { useFluidHover, useRegisterFluidHoverItem } from "@/hooks/use-fluid-hover";
 import { FluidHoverHighlight } from "@/components/fluid-hover-highlight";
+
+/** Router-aware anchor: in-app paths use the router, absolute URLs a plain anchor. */
+function Link({ href, children, ...rest }: { href: string } & Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "href">) {
+  if (/^(https?:)?\/\//.test(href) || href.startsWith("mailto:")) {
+    return <a href={href} {...rest}>{children}</a>;
+  }
+  return <RouterLink to={href} {...rest}>{children}</RouterLink>;
+}
+
 
 // ---------------------------------------------------------------------------
 // Card is shadcn/ui's compositional card — the same parts and `data-slot`
