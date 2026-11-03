@@ -109,6 +109,8 @@ export interface Report {
   /** Date after which the researcher may publish without a reply. */
   disclosureDeadline: string;
   rewardNear?: number;
+  /** NEAR account bound on chain to receive the reward. Parties only. */
+  payoutAccount?: string;
   summary: string;
   body: string; // markdown
   escrow?: EscrowState;
@@ -135,6 +137,8 @@ export interface ResearcherProfile {
   skills: string[];
   links: { github?: string; x?: string; website?: string };
   avatarSeed: string;
+  /** Your testnet wallet for bounties. Only returned to you. */
+  payoutAccount?: string;
   joinedAt?: string;
 }
 

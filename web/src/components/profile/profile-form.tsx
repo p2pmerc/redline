@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowsClockwise, At, Code, GithubLogo, Globe, IdentificationBadge, XLogo, WarningCircle, FloppyDisk } from "@phosphor-icons/react";
+import { ArrowsClockwise, At, Code, GithubLogo, Globe, IdentificationBadge, XLogo, WarningCircle, FloppyDisk, Wallet } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { InputField, InputGroup } from "@/components/ui/input-group";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
@@ -36,6 +36,7 @@ export function ProfileForm({ initial, suggestedName, submitLabel, onSaved }: Pr
   const [github, setGithub] = useState(initial?.links.github ?? "");
   const [x, setX] = useState(initial?.links.x ?? "");
   const [website, setWebsite] = useState(initial?.links.website ?? "");
+  const [payout, setPayout] = useState(initial?.payoutAccount ?? "");
   const [seed, setSeed] = useState(initial?.avatarSeed ?? randomSeed());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +48,7 @@ export function ProfileForm({ initial, suggestedName, submitLabel, onSaved }: Pr
     skills: skillList.length <= 10 && skillList.every((s) => s.length <= 30) ? undefined : "Up to 10 skills, each under 30 characters.",
     github: !github || (httpsUrl(github) && host(github, ["github.com"])) ? undefined : "Use a full https://github.com/… link.",
     x: !x || (httpsUrl(x) && host(x, ["x.com", "twitter.com"])) ? undefined : "Use a full https://x.com/… link.",
+    payout: !payout || /^([a-z\d]+[-_])*[a-z\d]+(\.([a-z\d]+[-_])*[a-z\d]+)*\.testnet$/.test(payout.trim().toLowerCase()) || /^[0-9a-f]{64}$/.test(payout.trim().toLowerCase()) ? undefined : "Use a NEAR testnet account like yourname.testnet.",
     website: !website || httpsUrl(website) ? undefined : "Use a full https link.",
   };
   const valid = Object.values(problems).every((p) => !p) && bio.length <= 400;
@@ -56,7 +58,7 @@ export function ProfileForm({ initial, suggestedName, submitLabel, onSaved }: Pr
     setError(null);
     try {
       const saved = await saveMyProfile({
-        handle, displayName: displayName.trim(), bio: bio.trim(), skills: skillList, avatarSeed: seed,
+        handle, displayName: displayName.trim(), bio: bio.trim(), skills: skillList, avatarSeed: seed, payoutAccount: payout.trim().toLowerCase() || undefined,
         links: { github: github.trim() || undefined, x: x.trim() || undefined, website: website.trim() || undefined },
       });
       onSaved(saved);
@@ -107,6 +109,13 @@ export function ProfileForm({ initial, suggestedName, submitLabel, onSaved }: Pr
         <InputField index={4} label="X" icon={XLogo} placeholder="https://x.com/you" value={x} onChange={setX} error={problems.x} disabled={saving} />
         <InputField index={5} label="Website" icon={Globe} placeholder="https://example.com" value={website} onChange={setWebsite} error={problems.website} disabled={saving} />
       </InputGroup>
+
+      <div className="space-y-2">
+        <InputGroup>
+          <InputField index={6} label="Payout NEAR account" icon={Wallet} placeholder="yourname.testnet" value={payout} onChange={setPayout} error={payout ? problems.payout : undefined} disabled={saving} />
+        </InputGroup>
+        <p className="text-caption text-muted-foreground">Bounties are paid straight to this wallet, and it is checked against NEAR testnet when you save. It is bound on chain to each report before the team can fund it, and only you and the team on your reports can see it.</p>
+      </div>
 
       {error && (
         <p role="alert" className="flex items-start gap-2 rounded-xl bg-destructive-light p-3 text-body text-destructive"><WarningCircle size={16} className="mt-0.5 shrink-0" /> {error}</p>

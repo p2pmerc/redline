@@ -61,6 +61,13 @@ export async function runMergeCheck(ctx: SettlementContext, r: StoredReport): Pr
     ledger.applyConfirmAnswer(r, await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, author), ctx.now());
     return;
   }
+  // The enclave does not know the researcher's GitHub login yet, so the author is checked here first.
+  // The enclave (and its 0.05 NEAR fee) is only used when this read already shows a merge by that author.
+  const seen = await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, author);
+  if (seen.status !== "merged") {
+    ledger.applyConfirmAnswer(r, seen, ctx.now());
+    return;
+  }
   // The enclave inside OutLayer looks at GitHub and the contract records its answer.
   const done = await needRelay(ctx).call("team", "request_merge_check", { report_id: r.id }, NEAR_CHECK_DEPOSIT, 300);
   const answer: MergeAnswer = { status: verdictOf(done.logs, "Confirm"), repo: r.escrow.repo, pullRequest: r.escrow.pullRequest };
@@ -76,6 +83,8 @@ export async function runClaim(ctx: SettlementContext, r: StoredReport): Promise
     ledger.applyPayoutAnswer(r, "researcher", await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, ctx.githubLoginOf(r.researcherId)), ctx.now());
     return;
   }
+  const seen = await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, ctx.githubLoginOf(r.researcherId));
+  if (seen.status !== "merged") throw new LedgerError("GitHub does not show this pull request merged by the researcher's linked GitHub account right now, so no payout was started.", 409);
   const done = await needRelay(ctx).call("researcher", "claim_payout", { report_id: r.id }, NEAR_CHECK_DEPOSIT, 300);
   const status = verdictOf(done.logs, "Payout");
   if (status === "merged" && !settled(done.logs, "Payout")) throw new ChainError("The payout transfer did not settle. Try claiming again.", 502);

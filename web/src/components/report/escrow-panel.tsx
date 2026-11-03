@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import {
   Vault, GitPullRequest, ArrowsClockwise, HandCoins, ArrowUUpLeft, CheckCircle, Hourglass, WarningCircle, Coins, Timer, Signature, GitBranch, Flask,
@@ -6,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InputField, InputGroup } from "@/components/ui/input-group";
 import { useToast } from "@/components/feedback/toast-provider";
-import { acceptTerms, checkMerge, claimPayout, fundEscrow, linkPullRequest, proposeTerms, refundEscrow } from "@/lib/data-source";
+import { acceptTerms, bindPayoutAccount, checkMerge, claimPayout, fundEscrow, linkPullRequest, proposeTerms, refundEscrow } from "@/lib/data-source";
 import { daysUntil, formatNear, shortDate } from "@/lib/format";
 import type { EscrowState, Report } from "@/lib/redline-types";
 
@@ -17,7 +18,7 @@ const mergeCopy: Record<EscrowState["mergeCheck"], { label: string; color: "gray
   unknown: { label: "GitHub did not answer, will retry", color: "red", icon: WarningCircle },
 };
 
-type Busy = null | "propose" | "accept" | "fund" | "link" | "check" | "claim" | "refund";
+type Busy = null | "payout" | "propose" | "accept" | "fund" | "link" | "check" | "claim" | "refund";
 
 export function EscrowPanel({ report, onChange }: { report: Report; onChange: (next: Report) => void }) {
   const toast = useToast();
@@ -65,6 +66,12 @@ export function EscrowPanel({ report, onChange }: { report: Report; onChange: (n
         </div>
       ) : null}
 
+      {report.payoutAccount && (
+        <dl className="mt-5 space-y-2.5 text-body">
+          <Row icon={<HandCoins size={15} />} label="Pays to" value={<span className="text-[12px]">{report.payoutAccount}</span>} />
+        </dl>
+      )}
+
       {escrow && !refunded && (
         <dl className="mt-5 space-y-2.5 text-body">
           <Row icon={<Timer size={15} />} label="Refund window" value={expired ? "Expired" : `Until ${shortDate(escrow.expiresAt)}`} />
@@ -100,9 +107,27 @@ export function EscrowPanel({ report, onChange }: { report: Report; onChange: (n
         )}
         {report.terms && !report.terms.accepted && isTeam && <p className="text-caption text-muted-foreground">Waiting for the researcher to accept. Proposing again replaces these terms.</p>}
 
+        {/* the reward goes to the researcher's own wallet, bound on chain before funding */}
+        {!escrow && !report.payoutAccount && !isTeam && report.stage !== "paid" && (
+          <div className="space-y-2 rounded-xl bg-[color-mix(in_srgb,var(--fluid-accent)_10%,var(--background))] p-3">
+            <p className="text-body font-medium">Set where you get paid</p>
+            <p className="text-caption text-muted-foreground">Funding stays blocked until your payout NEAR account is bound to this report. Add it to your profile, then bind it here.</p>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/app/settings" className="inline-flex items-center rounded-full bg-surface-3 px-3 py-1.5 text-caption font-medium shadow-surface-2">Open profile settings</Link>
+              <Button size="compact" variant="secondary" loading={busy === "payout"} disabled={busy !== null}
+                onClick={() => run("payout", "Binding your payout account…", "Payout account bound", () => bindPayoutAccount(report.id))}>
+                Bind my profile account
+              </Button>
+            </div>
+          </div>
+        )}
+        {report.terms?.accepted && !escrow && isTeam && !report.payoutAccount && (
+          <p className="text-caption text-muted-foreground">Funding is blocked until the researcher sets a payout NEAR account for this report. They have been asked to.</p>
+        )}
+
         {/* 3. the team funds */}
         {report.terms?.accepted && !escrow && isTeam && (
-          <Button className="w-full" loading={busy === "fund"} leadingIcon={Coins} disabled={busy !== null}
+          <Button className="w-full" loading={busy === "fund"} leadingIcon={Coins} disabled={busy !== null || !report.payoutAccount}
             onClick={() => run("fund", "Funding the escrow…", "Escrow funded", () => fundEscrow(report.id))}>
             Fund {formatNear(report.terms.amountNear)}
           </Button>
@@ -126,6 +151,7 @@ export function EscrowPanel({ report, onChange }: { report: Report; onChange: (n
             {isTeam && escrow?.pullRequestUrl && <p className="break-all text-caption text-muted-foreground">Fix: {escrow.pullRequestUrl}</p>}
             {isTeam && !escrow?.pullRequestUrl && <p className="text-caption text-muted-foreground">Waiting for the researcher to link the fix pull request.</p>}
 
+            {!confirmed && escrow?.pullRequestUrl && <p className="text-caption text-muted-foreground">Payout is automatic: once the pull request is merged by the linked author, the escrow pays out within a few minutes.</p>}
             {!confirmed && (
               <Button variant="secondary" className="w-full" loading={busy === "check"} leadingIcon={ArrowsClockwise} disabled={!escrow?.pullRequestUrl || busy !== null}
                 onClick={() => run("check", "Checking GitHub…", "Merge check complete", () => checkMerge(report.id))}>

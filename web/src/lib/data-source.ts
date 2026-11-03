@@ -20,6 +20,7 @@ interface PartyView {
   updatedAt: string;
   disclosureDeadline: string;
   rewardNear?: number;
+  payoutAccount?: string;
   summary: string;
   contentHash: string;
   ciphertextHex?: string;
@@ -80,7 +81,7 @@ async function toReport(view: PartyView): Promise<Report> {
   return {
     id: view.id, title: view.title, target: view.target, repo: view.repo, severity: view.severity, stage: view.stage, role: view.role,
     counterparty: view.counterparty, researcherSeed: view.researcherSeed, teamSeed: view.teamSeed, createdAt: view.createdAt, updatedAt: view.updatedAt, disclosureDeadline: view.disclosureDeadline,
-    rewardNear: view.rewardNear, summary: view.summary, body, bodyLocked, escrow: view.escrow, terms: view.terms, invites: view.invites,
+    rewardNear: view.rewardNear, payoutAccount: view.payoutAccount, summary: view.summary, body, bodyLocked, escrow: view.escrow, terms: view.terms, invites: view.invites,
     messages, timeline: view.timeline, contentHash: view.contentHash, publishedAt: view.published?.at, evidenceHash: view.published?.evidenceHash,
   };
 }
@@ -192,6 +193,7 @@ export const revokeInvite = (id: string, inviteId: string) => post(id, `invites/
 export const proposeTerms = (id: string, amountNear: number, repo: string) => post(id, "terms", { amountNear, repo });
 export const acceptTerms = (id: string) => post(id, "terms/accept");
 export const fundEscrow = (id: string) => post(id, "fund");
+export const bindPayoutAccount = (id: string) => post(id, "payout-account");
 export const linkPullRequest = (id: string, url: string) => post(id, "pull-request", { url });
 export const checkMerge = (id: string) => post(id, "check-merge");
 export const claimPayout = (id: string) => post(id, "claim");
