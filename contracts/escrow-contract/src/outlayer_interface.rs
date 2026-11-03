@@ -1,7 +1,7 @@
 //! The part of OutLayer this contract talks to.
 //!
-//! Shape taken from the OutLayer on-chain integration guide. The two documented forms of
-//! `code_source` differ, so the JSON is built in one place to make that easy to change.
+//! Shape taken from the OutLayer on-chain integration guide (`source` is `Project` or `WasmUrl`).
+//! The JSON is built in one place so a change in the shape touches only this file.
 
 use near_sdk::serde_json::{json, Value};
 use near_sdk::{ext_contract, AccountId};
@@ -13,7 +13,7 @@ use crate::report_types::{CheckPhase, ContractConfig};
 pub trait OutLayer {
     fn request_execution(
         &mut self,
-        code_source: Value,
+        source: Value,
         resource_limits: Value,
         input_data: String,
         secrets_ref: Option<Value>,
@@ -22,11 +22,13 @@ pub trait OutLayer {
     );
 }
 
-pub fn code_source(config: &ContractConfig) -> Value {
+/// The enclave is run as a registered OutLayer project, so the version cannot change under a running escrow.
+/// `version_key` is the wasm sha256 of one version, or null for the active version.
+pub fn execution_source(config: &ContractConfig) -> Value {
     json!({
-        "GitHub": {
-            "url": config.enclave_source_url,
-            "hash": config.enclave_source_hash,
+        "Project": {
+            "project_id": config.enclave_project_id,
+            "version_key": config.enclave_version_key,
         }
     })
 }
@@ -38,7 +40,7 @@ pub fn resource_limits() -> Value {
 /// Input for the enclave action that checks a pull request.
 pub fn merge_check_input(report_id: &str, repo: &str, pull_request: u64, phase: CheckPhase) -> String {
     json!({
-        "action": "check_merge",
+        "action": "merge_check",
         "report_id": report_id,
         "repo": repo,
         "pull_request": pull_request,

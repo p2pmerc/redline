@@ -54,8 +54,8 @@ impl EscrowContract {
     pub fn new(
         owner: AccountId,
         outlayer_contract: AccountId,
-        enclave_source_url: String,
-        enclave_source_hash: Option<String>,
+        enclave_project_id: String,
+        enclave_version_key: Option<String>,
         escrow_ttl_days: u64,
         liveness_grace_days: u64,
     ) -> Self {
@@ -64,8 +64,8 @@ impl EscrowContract {
             config: ContractConfig {
                 owner,
                 outlayer_contract,
-                enclave_source_url,
-                enclave_source_hash,
+                enclave_project_id,
+                enclave_version_key,
                 min_outlayer_deposit: U128(NearToken::from_millinear(10).as_yoctonear()),
                 escrow_ttl_ns: escrow_ttl_days * DAY_NS,
                 liveness_grace_ns: liveness_grace_days * DAY_NS,
@@ -436,10 +436,10 @@ impl EscrowContract {
     // ---------------------------------------------------------------- admin and views
 
     /// Owner only. Never touches escrowed funds.
-    pub fn update_enclave_source(&mut self, url: String, hash: Option<String>, min_outlayer_deposit: U128) {
+    pub fn update_enclave_project(&mut self, project_id: String, version_key: Option<String>, min_outlayer_deposit: U128) {
         require!(env::predecessor_account_id() == self.config.owner, "only the owner");
-        self.config.enclave_source_url = url;
-        self.config.enclave_source_hash = hash;
+        self.config.enclave_project_id = project_id;
+        self.config.enclave_version_key = version_key;
         self.config.min_outlayer_deposit = min_outlayer_deposit;
     }
 
@@ -496,7 +496,7 @@ impl EscrowContract {
             .with_attached_deposit(deposit)
             .with_unused_gas_weight(1)
             .request_execution(
-                outlayer_interface::code_source(&self.config),
+                outlayer_interface::execution_source(&self.config),
                 outlayer_interface::resource_limits(),
                 outlayer_interface::merge_check_input(report_id, &terms.repo, pull_request, phase),
                 None,

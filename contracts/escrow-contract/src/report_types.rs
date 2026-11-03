@@ -97,9 +97,9 @@ pub struct ContractConfig {
     pub owner: AccountId,
     pub outlayer_contract: AccountId,
     /// GitHub URL of the enclave project that OutLayer is asked to run.
-    pub enclave_source_url: String,
+    pub enclave_project_id: String,
     /// Optional pinned build hash of that project.
-    pub enclave_source_hash: Option<String>,
+    pub enclave_version_key: Option<String>,
     /// Smallest deposit forwarded to OutLayer to pay for one execution.
     pub min_outlayer_deposit: U128,
     /// How long funded money stays locked before the funder can ask for a refund.

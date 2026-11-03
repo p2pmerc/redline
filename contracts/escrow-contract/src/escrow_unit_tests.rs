@@ -551,7 +551,7 @@ fn only_the_researcher_can_publish() {
 fn only_the_owner_can_update_the_enclave_source() {
     let mut c = new_contract();
     ctx(stranger(), 0, START);
-    c.update_enclave_source("https://github.com/example/x".into(), None, U128(1));
+    c.update_enclave_project("someone.testnet/other-enclave".into(), None, U128(1));
 }
 
 // ------------------------------------------------------------------ invited readers
