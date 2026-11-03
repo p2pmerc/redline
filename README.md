@@ -51,6 +51,8 @@ Live base URL: `https://redline-app-production-b0e6.up.railway.app` (NEAR testne
 | `GET /api/v1/disclosures/:id` | One public disclosure: the list fields plus summary, body (only if the researcher unsealed it), merge commit, proof (contract, content hash, enclave info) and a public timeline. |
 | `GET /api/v1/reports/:id` | Any report, public or private. With no token you get metadata and hashes only. |
 | `GET /api/v1/verify/:id` | Re-checks a public report live: the contract record, the GitHub merge, the fund transaction and the payout transaction. Limited to 20 calls a minute, cached for 60 s. |
+| `GET /api/v1/leaderboard?limit=50&offset=0` | Researcher leaderboard, ranked by NEAR earned from fixed-and-paid reports (ties share a rank): handle, display name, avatar seed, total earned, disclosures, paid count, highest severity, last paid date. Only researchers with a public profile and at least one public disclosure appear. |
+| `GET /api/v1/researchers/:handle` | One researcher's public profile (bio, skills, public links), rank, totals and all of their public disclosures in the same shape as the list endpoint, with PR and transaction links. Never includes emails or payout wallets. |
 | `GET /llms.txt`, `GET /.well-known/redline.json` | Discovery for agents. |
 
 ### Copy-paste examples (run against the live app)
@@ -73,7 +75,11 @@ curl -s -H "Authorization: Bearer not-a-real-token" "$U/api/v1/reports/rl-18048f
 # 5. Check the escrow, merge and payout yourself
 curl -s "$U/api/v1/verify/rl-6f0812c1a1a5"
 
-# 6. Discovery
+# 6. Researcher leaderboard and one researcher
+curl -s "$U/api/v1/leaderboard"
+curl -s "$U/api/v1/researchers/p2pmerch"
+
+# 7. Discovery
 curl -s "$U/api/v1"
 curl -s "$U/llms.txt"
 curl -s "$U/.well-known/redline.json"
@@ -156,12 +162,99 @@ Real responses (trimmed with `…`):
 
 Other errors are `404 not_public` (disclosure and verify only know public reports), `404 not_found`, `400 invalid_id` (ids look like `rl-0123456789ab`), `405 method_not_allowed`, `429 rate_limited` on `/verify`.
 
+`GET /api/v1/leaderboard`
+
+```json
+{
+  "total": 1,
+  "limit": 50,
+  "offset": 0,
+  "ledgerMode": "testnet",
+  "rankedBy": "totalEarnedNear (fixed-and-paid reports), then paid count, then disclosures, then handle",
+  "researchers": [
+    {
+      "rank": 1,
+      "handle": "p2pmerch",
+      "displayName": "p2pmerch",
+      "avatarSeed": "d41883251d3b4331",
+      "totalEarnedNear": 2.35,
+      "disclosures": 5,
+      "paid": 5,
+      "highestSeverity": "critical",
+      "lastPaidAt": "2026-11-03T11:36:56.507Z",
+      "links": {
+        "profile": "https://redline-app-production-b0e6.up.railway.app/researchers/p2pmerch",
+        "api": "https://redline-app-production-b0e6.up.railway.app/api/v1/researchers/p2pmerch"
+      }
+    }
+  ]
+}
+```
+
+`GET /api/v1/researchers/p2pmerch` (the `disclosures` array has one item per public disclosure; four are elided here)
+
+```json
+{
+  "handle": "p2pmerch",
+  "displayName": "p2pmerch",
+  "bio": "I hack sometimes",
+  "skills": [],
+  "links": {
+    "github": "https://github.com/p2pmerc"
+  },
+  "avatarSeed": "d41883251d3b4331",
+  "joinedAt": "2026-11-03T06:59:53.023Z",
+  "rank": 1,
+  "totalEarnedNear": 2.35,
+  "disclosures": [
+    {
+      "id": "rl-9a8bf23774fe",
+      "title": "SSRF: /preview fetches arbitrary http(s) URLs with no host allowlist",
+      "repo": "p2pmerc/link-preview",
+      "target": "p2pmerc",
+      "severity": "high",
+      "status": "paid",
+      "outcome": "fixed_and_paid",
+      "bountyNear": 0.3,
+      "pullRequestUrl": "https://github.com/p2pmerc/link-preview/pull/1",
+      "researcher": "p2pmerch",
+      "bodyPublished": false,
+      "fundTxHash": "BZPSWj81RsPzJMViobunatJqMrP7JyLGPbnYXsYagSwV",
+      "payoutTxHash": "Bjp5yq1oLCv3bH63pPe88Gq7FFqDNjyhBH8h5o4hxBJk",
+      "timestamps": {
+        "createdAt": "2026-11-03T07:16:25.471Z",
+        "fundedAt": "2026-11-03T10:39:48.552Z",
+        "paidAt": "2026-11-03T11:36:56.507Z",
+        "listedAt": "2026-11-03T11:36:56.507Z"
+      },
+      "links": {
+        "self": "https://redline-app-production-b0e6.up.railway.app/api/v1/disclosures/rl-9a8bf23774fe",
+        "verify": "https://redline-app-production-b0e6.up.railway.app/api/v1/verify/rl-9a8bf23774fe",
+        "page": "https://redline-app-production-b0e6.up.railway.app/disclosures/rl-9a8bf23774fe",
+        "fundTx": "https://testnet.nearblocks.io/txns/BZPSWj81RsPzJMViobunatJqMrP7JyLGPbnYXsYagSwV",
+        "payoutTx": "https://testnet.nearblocks.io/txns/Bjp5yq1oLCv3bH63pPe88Gq7FFqDNjyhBH8h5o4hxBJk",
+        "pullRequest": "https://github.com/p2pmerc/link-preview/pull/1"
+      }
+    },
+    "\u2026"
+  ],
+  "paid": 5,
+  "highestSeverity": "critical",
+  "lastPaidAt": "2026-11-03T11:36:56.507Z",
+  "ledgerMode": "testnet",
+  "profilePage": "https://redline-app-production-b0e6.up.railway.app/researchers/p2pmerch"
+}
+```
+
+The same data is browsable at https://redline-app-production-b0e6.up.railway.app/leaderboard and https://redline-app-production-b0e6.up.railway.app/researchers/p2pmerch.
+
 ### Security model: what a caller can and cannot see
 
 - **Anonymous caller, public report** (`paid` or `published`): title, summary, repo, severity, bounty, PR URL, tx hashes, merge commit, public timeline and proof fields. The body is empty unless the researcher unsealed it after the disclosure deadline.
 - **Anonymous caller, private report**: only `id`, `stage`, `severity`, `createdAt`, `disclosureDeadline`, the ciphertext hash and size, whether a sealed key exists, a message count and the enclave info. Title, summary, parties, chat and body are hidden, so an id alone reveals nothing about what is wrong or in which product.
 - **Wrong or expired token**: `401 invalid_token`. **Valid token that is not a party to the report**: `403 forbidden`. The same private metadata is never leaked through the error.
 - **A party's token**: the encrypted record. Even then the API never returns the report key, the plaintext, or invitee emails (invite handles are shown as "Security team"). Plaintext only comes out of the OutLayer TEE enclave after the contract confirms the caller is a listed party; the key is sealed to the enclave public key, and the server never holds it.
+- **Leaderboard and researcher profiles**: built only from public reports (`paid` or `published`) and the researcher's public profile (handle, display name, bio, skills, links, avatar seed). Earnings count fixed-and-paid reports only. Emails, payout wallets, private reports and report ids that are not public are never included.
 - The API cannot write. There are no POST routes under `/api/v1`, so an agent cannot fund, merge, claim or publish anything through it.
 - Everything money-related is checkable off-platform: the contract `redline-escrow.testnet` (`get_report`, `get_config`) and the explorer links in each response.
 
