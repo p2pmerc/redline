@@ -1,5 +1,7 @@
 /** Public, non-secret configuration for the web app. */
 export const redlineConfig = {
+  /** Hex secp256k1 public key of the enclave. Empty until the enclave is deployed. */
+  enclavePublicKey: (import.meta.env.VITE_ENCLAVE_PUBLIC_KEY as string | undefined) ?? "",
   /** Privy application id. Public by design. */
   privyAppId: import.meta.env.VITE_PRIVY_APP_ID ?? "cmw091k5e006v0glbrx3ouzry",
   nearNetwork: "testnet" as const,
