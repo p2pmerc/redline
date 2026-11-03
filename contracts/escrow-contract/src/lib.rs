@@ -500,7 +500,7 @@ impl EscrowContract {
                 outlayer_interface::resource_limits(),
                 outlayer_interface::merge_check_input(report_id, &terms.repo, pull_request, phase),
                 None,
-                "String".to_string(),
+                "Text".to_string(),
                 Some(env::predecessor_account_id()),
             )
             .then(

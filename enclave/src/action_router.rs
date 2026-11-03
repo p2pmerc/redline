@@ -90,7 +90,7 @@ fn handle(request: Request, services: &Services) -> Result<Value, String> {
     match request {
         Request::Pubkey => {
             let secret = crate::enclave_key::derive_ecies_secret(master(services)?)?;
-            Ok(ok(json!({ "public_key": crate::enclave_key::public_key_hex(&secret)? })))
+            Ok(ok(json!({ "public_key": crate::enclave_key::public_key_hex(&secret)?, "enclave_version": env!("CARGO_PKG_VERSION") })))
         }
         // The contract reads this answer, so it is returned bare, not wrapped.
         Request::MergeCheck { repo, pull_request } => {

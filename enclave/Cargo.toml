@@ -1,6 +1,6 @@
 [package]
 name = "redline-enclave"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "Redline enclave: opens sealed vulnerability reports only for the parties on chain, checks pull-request merges fail-closed, and verifies sign-ins from inside an OutLayer TDX worker."
