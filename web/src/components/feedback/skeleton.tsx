@@ -7,7 +7,7 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function ReportCardSkeleton() {
   return (
-    <div className="rounded-2xl bg-surface-3 p-5 shadow-surface-2" aria-busy="true">
+    <div className="card-hairline p-5" aria-busy="true">
       <div className="flex items-center gap-2">
         <Skeleton className="h-5 w-16 rounded-full" />
         <Skeleton className="h-5 w-20 rounded-full" />

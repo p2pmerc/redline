@@ -101,7 +101,7 @@ function ReportView({ initial, reload }: { initial: Report; reload: () => void }
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl bg-surface-3 p-4 shadow-surface-2">
+      <div className="overflow-x-auto card-hairline p-4">
         <StageStepper current={report.stage} />
       </div>
 
@@ -129,7 +129,7 @@ function ReportView({ initial, reload }: { initial: Report; reload: () => void }
             </div>
           )}
           {tab === 1 && <SealedChat report={report} onChange={setReport} />}
-          {tab === 2 && <div className="rounded-2xl bg-surface-3 p-3 shadow-surface-2"><ActivityTimeline events={report.timeline} /></div>}
+          {tab === 2 && <div className="card-hairline p-3"><ActivityTimeline events={report.timeline} /></div>}
         </div>
 
         <div className="space-y-4">

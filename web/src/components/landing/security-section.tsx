@@ -29,7 +29,7 @@ export function SecuritySection() {
         <div className="mx-auto mt-12 grid max-w-6xl gap-3 md:grid-cols-2">
           {guarantees.map((g, i) => (
             <Reveal key={g.title} delay={i * 0.05}>
-              <div className="flex h-full gap-4 rounded-2xl bg-surface-3 p-6 shadow-surface-2">
+              <div className="flex h-full gap-4 card-hairline p-6">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-foreground/[0.06]">
                   <g.icon size={20} />
                 </span>

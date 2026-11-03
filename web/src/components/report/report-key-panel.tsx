@@ -17,7 +17,7 @@ export function ReportKeyPanel({ report, onUnlocked }: { report: Report; onUnloc
 
   if (report.bodyLocked) {
     return (
-      <section className="rounded-2xl bg-surface-3 p-5 shadow-surface-2" aria-label="Report key">
+      <section className="card-hairline p-5" aria-label="Report key">
         <h2 className="mb-2 flex items-center gap-2 text-subtitle font-semibold"><Key size={16} /> Report key needed</h2>
         <p className="mb-3 text-body text-muted-foreground">This browser does not hold the key for this report, so the text and chat stay encrypted. Open the invite link you were sent again, or paste the 64-character key.</p>
         <form onSubmit={(e) => {
@@ -40,7 +40,7 @@ export function ReportKeyPanel({ report, onUnlocked }: { report: Report; onUnloc
 
   if (report.role !== "researcher" || !key) return null;
   return (
-    <section className="rounded-2xl bg-surface-3 p-5 shadow-surface-2" aria-label="Report key backup">
+    <section className="card-hairline p-5" aria-label="Report key backup">
       <h2 className="mb-2 flex items-center gap-2 text-subtitle font-semibold"><Key size={16} /> Your report key</h2>
       <p className="mb-3 text-body text-muted-foreground">It lives only in this browser. Back it up now: lose it and the report cannot be opened here again.</p>
       <Button

@@ -34,7 +34,7 @@ export function InviteRedeemPage() {
   return (
     <div className="mx-auto max-w-md py-10">
       {loading ? (
-        <div className="space-y-3 rounded-2xl bg-surface-3 p-6 shadow-surface-2" aria-busy="true" aria-label="Loading invite">
+        <div className="space-y-3 card-hairline p-6" aria-busy="true" aria-label="Loading invite">
           <Skeleton className="h-5 w-24" /><Skeleton className="h-7 w-3/4" /><Skeleton className="h-4 w-full" /><Skeleton className="h-9 w-full" />
         </div>
       ) : error ? (
@@ -43,7 +43,7 @@ export function InviteRedeemPage() {
               action={<Button variant="secondary" render={<Link to="/app" />}>Go to your reports</Button>} />
           : <ErrorState message={error.message} onRetry={reload} />
       ) : data && (
-        <div className="space-y-5 rounded-2xl bg-surface-3 p-6 shadow-surface-2">
+        <div className="space-y-5 card-hairline p-6">
           <div className="flex items-center gap-3">
             <ProfileAvatar size="lg" name={data.from} />
             <p className="text-subtitle"><span className="font-medium">{data.from}</span> invited you to a sealed report</p>

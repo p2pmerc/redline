@@ -111,7 +111,7 @@ export function NewReportPage() {
         <p className="text-body text-muted-foreground">Write the report, then seal it. The text never leaves your browser unencrypted.</p>
       </div>
 
-      <section className="space-y-3 rounded-2xl bg-surface-3 p-5 shadow-surface-2">
+      <section className="space-y-3 card-hairline p-5">
         <InputGroup>
           <InputField index={0} label="Title" icon={Bug} placeholder="Short, specific, no exploit details" value={title} onChange={setTitle} disabled={sealing} />
           <InputField index={1} label="Affected repository (optional)" icon={GitBranch} placeholder="owner/name" value={repo} onChange={setRepo} disabled={sealing}

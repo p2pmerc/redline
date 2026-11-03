@@ -42,7 +42,7 @@ export function SealedChat({ report, onChange }: SealedChatProps) {
   }
 
   return (
-    <div className="flex h-[520px] flex-col rounded-2xl bg-surface-3 shadow-surface-2">
+    <div className="flex h-[520px] flex-col card-hairline">
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
         <LockKey size={16} className="text-muted-foreground" />
         <p className="text-subtitle font-medium">Sealed chat with {counterparty}</p>

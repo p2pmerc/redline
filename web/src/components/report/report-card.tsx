@@ -39,7 +39,7 @@ export function ReportCard({ report, index = 0, to }: { report: Report; index?: 
     >
       <Link
         to={to ?? `/app/reports/${report.id}`}
-        className="group block rounded-2xl bg-surface-3 p-5 shadow-surface-2 transition-shadow duration-200 hover:shadow-surface-4 focus-visible:outline-offset-4"
+        className="card-hairline group block p-5 transition-shadow duration-200 hover:shadow-surface-4 focus-visible:outline-offset-4"
       >
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge color={severityTone[report.severity]} className="capitalize">{report.severity}</Badge>

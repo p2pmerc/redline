@@ -24,7 +24,7 @@ export function PublishPanel({ report, onChange }: { report: Report; onChange: (
   }
 
   return (
-    <section className="rounded-2xl bg-surface-3 p-5 shadow-surface-2" aria-label="Publish">
+    <section className="card-hairline p-5" aria-label="Publish">
       <h2 className="mb-2 flex items-center gap-2 text-subtitle font-semibold"><Megaphone size={16} /> Publish</h2>
       {open ? (
         <>

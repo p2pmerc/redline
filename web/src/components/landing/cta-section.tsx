@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, GithubLogo } from "@phosphor-icons/react";
+import { GithubLogo } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { RedlineWordmark } from "@/components/redline-logo";
 import { Reveal } from "./reveal";
@@ -17,7 +17,7 @@ export function CtaSection() {
           Sign in to start a real sealed report on NEAR testnet.
         </p>
         <div className="mt-7 flex flex-col items-center justify-center gap-2 sm:flex-row">
-          <Button size="lg" variant="secondary" trailingIcon={ArrowRight} onClick={() => navigate("/app")}>Open Redline</Button>
+          <Button size="lg" onClick={() => navigate("/app")}>Open Redline</Button>
         </div>
       </Reveal>
     </section>

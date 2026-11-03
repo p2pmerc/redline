@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
-import { ArrowRight, BookOpenText, LockKey, ShieldCheck, GitMerge, Coins } from "@phosphor-icons/react";
+import { BookOpenText, LockKey, ShieldCheck, GitMerge, Coins } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -79,7 +79,7 @@ export function HeroSection() {
           Redline seals your vulnerability report so only the verified team can read it, locks the bounty in a NEAR escrow, and releases it when the pull request merges. If nobody answers, you can still publish on your own deadline.
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-2 sm:flex-row">
-          <Button size="lg" trailingIcon={ArrowRight} onClick={() => navigate("/app/reports/new")}>Start a sealed report</Button>
+          <Button size="lg" onClick={() => navigate("/app/reports/new")}>Start a sealed report</Button>
           <Button size="lg" variant="secondary" leadingIcon={BookOpenText} onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}>
             See how it works
           </Button>

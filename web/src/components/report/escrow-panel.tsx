@@ -156,7 +156,7 @@ export function EscrowPanel({ report, onChange }: { report: Report; onChange: (n
 
 function Panel({ children, preview }: { children: React.ReactNode; preview: boolean }) {
   return (
-    <section className="rounded-2xl bg-surface-3 p-5 shadow-surface-2" aria-label="Escrow">
+    <section className="card-hairline p-5" aria-label="Escrow">
       <h2 className="mb-4 flex items-center gap-2 text-subtitle font-semibold">
         <Vault size={16} /> Escrow
         {preview && <Badge color="gray" className="ml-auto"><Flask size={11} /> Preview ledger</Badge>}

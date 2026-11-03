@@ -79,7 +79,7 @@ export function ReportEditor({ value, onChange, editable = true, placeholder = "
   }
 
   return (
-    <div className={cn("overflow-hidden rounded-2xl bg-surface-3 shadow-surface-2", className)}>
+    <div className={cn("overflow-hidden card-hairline", className)}>
       {editable && (
         <div className="flex flex-wrap items-center gap-0.5 border-b border-border/60 bg-surface-2 p-1.5" role="toolbar" aria-label="Formatting">
           {actions.map((a, i) =>

@@ -35,7 +35,7 @@ export function HowItWorksSection() {
       <div className="mx-auto mt-12 grid max-w-6xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {steps.map((step, i) => (
           <Reveal key={step.title} delay={i * 0.06}>
-            <article className="group relative h-full rounded-2xl bg-surface-3 p-6 shadow-surface-2 transition-shadow duration-200 hover:shadow-surface-4">
+            <article className="group relative h-full card-hairline p-6 transition-shadow duration-200 hover:shadow-surface-4">
               <div className="flex items-center justify-between">
                 <span className="flex size-10 items-center justify-center rounded-xl bg-foreground/[0.06] text-foreground transition-colors group-hover:bg-fluid-accent group-hover:text-white">
                   <step.icon size={20} />

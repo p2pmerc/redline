@@ -69,7 +69,7 @@ export function ProfileForm({ initial, suggestedName, submitLabel, onSaved }: Pr
 
   return (
     <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); if (valid && !saving) void submit(); }}>
-      <div className="flex items-center gap-4 rounded-2xl bg-surface-3 p-4 shadow-surface-2">
+      <div className="flex items-center gap-4 card-hairline p-4">
         <ProfileAvatar size="xl" name={displayName || "You"} seed={seed} />
         <div className="min-w-0 flex-1">
           <p className="text-subtitle font-medium">Your avatar</p>

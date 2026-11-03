@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, List, X } from "@phosphor-icons/react";
+import { List, X } from "@phosphor-icons/react";
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ export function SiteHeader() {
         </nav>
         <div className="flex items-center gap-1">
           <ThemeToggle />
-          <Button className="hidden sm:inline-flex" trailingIcon={ArrowRight} onClick={() => navigate("/app")}>
+          <Button className="hidden sm:inline-flex" onClick={() => navigate("/app")}>
             Launch app
           </Button>
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setOpen((o) => !o)} aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open}>

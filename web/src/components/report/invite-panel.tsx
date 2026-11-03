@@ -79,7 +79,7 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
   }
 
   return (
-    <section className="rounded-2xl bg-surface-3 p-5 shadow-surface-2" aria-label="Invites">
+    <section className="card-hairline p-5" aria-label="Invites">
       <h2 className="mb-4 flex items-center gap-2 text-subtitle font-semibold"><UserPlus size={16} /> Invited people</h2>
       {invites.length === 0 ? (
         <p className="text-body text-muted-foreground">Nobody has been invited yet. Invite the security contact of the affected project.</p>
