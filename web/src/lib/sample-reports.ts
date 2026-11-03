@@ -147,7 +147,7 @@ export const sampleReports: Report[] = [
     target: "Northwind Auth",
     repo: "northwind/auth-service",
     severity: "medium",
-    stage: "paid",
+    stage: "published",
     role: "researcher",
     counterparty: "Northwind security",
     createdAt: hoursAgo(700),
@@ -155,7 +155,7 @@ export const sampleReports: Report[] = [
     disclosureDeadline: daysFromNow(-10),
     rewardNear: 340,
     summary: "Reset tokens are seeded from a millisecond clock, so tokens can be predicted.",
-    body: "## Summary\n\nReset tokens use a timestamp-seeded PRNG.",
+    body: "## Summary\n\nReset tokens use a timestamp-seeded PRNG, so an attacker who knows roughly when a reset was requested can enumerate the small space of possible tokens.\n\n```js\nconst token = sha1(String(Date.now())).slice(0, 12);\n```\n\n## Fix\n\nUse `crypto.randomBytes(32)` and store only a hash of the token.",
     contentHash: fakeHash("rl-0d5e12-body"),
     escrow: {
       amountNear: 340,
@@ -173,6 +173,7 @@ export const sampleReports: Report[] = [
       event("t15", 300, "escrow_funded", "Escrow funded", undefined, true),
       event("t16", 121, "pr_merged", "Fix merged", "Enclave checked northwind/auth-service#92", true),
       event("t17", 120, "payout", "340 NEAR paid", "Released to the researcher", true),
+      event("t19", 24, "published", "Disclosure published", "Report, fix and payout evidence are now public", true),
     ],
   },
   {
