@@ -22,6 +22,12 @@ pub trait OutLayer {
     );
 }
 
+/// The keystore secrets (the enclave master secret) live under the project owner's default profile.
+pub fn secrets_ref(config: &ContractConfig) -> Value {
+    let owner = config.enclave_project_id.split('/').next().unwrap_or_default();
+    json!({ "profile": "default", "account_id": owner })
+}
+
 /// The enclave is run as a registered OutLayer project, so the version cannot change under a running escrow.
 /// `version_key` is the wasm sha256 of one version, or null for the active version.
 pub fn execution_source(config: &ContractConfig) -> Value {
