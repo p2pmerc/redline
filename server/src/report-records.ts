@@ -77,6 +77,8 @@ export interface StoredReport {
   disclosureDeadline: string;
   contentHash: string;
   ciphertextHex: string;
+  /** Report key sealed to the enclave public key. Opaque to the server. */
+  sealedKeyHex?: string;
   status: LedgerStatus;
   terms?: TermsRecord;
   escrow?: EscrowRecord;

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { setAuthBridge } from "./api-client";
 import { PrivyProvider, usePrivy } from "@privy-io/react-auth";
 import { redlineConfig } from "./redline-config";
 
@@ -17,7 +18,7 @@ const SessionContext = createContext<RedlineSession | null>(null);
 const demoKey = "redline-demo-session";
 
 function SessionBridge({ children }: { children: ReactNode }) {
-  const { ready, authenticated, user, login, logout } = usePrivy();
+  const { ready, authenticated, user, login, logout, getAccessToken } = usePrivy();
   const [demo, setDemo] = useState(() => sessionStorage.getItem(demoKey) === "1");
 
   const signOut = useCallback(async () => {
@@ -49,6 +50,10 @@ function SessionBridge({ children }: { children: ReactNode }) {
       startDemo,
     };
   }, [ready, authenticated, demo, user, login, signOut, startDemo]);
+
+  // Data calls read the token and name through this bridge. It is set during render, not in an effect,
+  // because child effects (the first data loads) run before a parent effect would.
+  setAuthBridge({ getToken: async () => (authenticated ? getAccessToken() : null), displayName: value.displayName, demo: value.demo });
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

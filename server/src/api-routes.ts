@@ -31,6 +31,7 @@ const createReportBody = z.object({
   disclosureDays: z.number().int().min(7).max(180),
   ciphertextHex: hex(2_000_000),
   contentHash: hash64,
+  sealedKeyHex: hex(4000).optional(),
 });
 const inviteBody = z.object({ channel: z.enum(["email", "x", "telegram", "github"]), handle: z.string().trim().min(2).max(120) });
 const messageBody = z.object({ ciphertextHex: hex(40_000), hash: hash64 });
@@ -135,6 +136,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
       disclosureDeadline: new Date(now.getTime() + input.disclosureDays * 86_400_000).toISOString(),
       contentHash: input.contentHash.toLowerCase(),
       ciphertextHex: input.ciphertextHex.toLowerCase(),
+      sealedKeyHex: input.sealedKeyHex?.toLowerCase(),
       status: "registered",
       invites: [],
       messages: [],

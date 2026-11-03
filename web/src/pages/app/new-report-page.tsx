@@ -10,6 +10,8 @@ import { ReportEditor } from "@/components/report/report-editor";
 import { useToast } from "@/components/feedback/toast-provider";
 import { redlineConfig } from "@/lib/redline-config";
 import { sealKeyToEnclave, sealReportBody } from "@/lib/report-encryption";
+import { createReport } from "@/lib/data-source";
+import { isDemoSession } from "@/lib/api-client";
 import { exportMarkdown, exportPdf } from "@/lib/report-export";
 import { cn } from "@/lib/utils";
 import type { Severity } from "@/lib/redline-types";
@@ -21,8 +23,8 @@ const deadlines = [30, 45, 60, 90];
 const steps = [
   { id: "encrypt", label: "Encrypting the report in your browser", icon: LockKey },
   { id: "hash", label: "Hashing the ciphertext", icon: Hash },
-  { id: "key", label: "Sealing the key to the enclave", icon: Key },
-  { id: "chain", label: "Registering the hash on NEAR testnet", icon: Cube },
+  { id: "key", label: "Preparing the key", icon: Key },
+  { id: "chain", label: "Registering the hash", icon: Cube },
 ] as const;
 
 type StepState = "idle" | "active" | "done" | "error";
@@ -52,6 +54,7 @@ export function NewReportPage() {
   const [repo, setRepo] = useState("");
   const [severity, setSeverity] = useState<Severity>("high");
   const [days, setDays] = useState("90");
+  const [summary, setSummary] = useState("");
   const [body, setBody] = useState(starter);
   const [sealing, setSealing] = useState(false);
   const [progress, setProgress] = useState<Record<string, StepState>>({});
@@ -64,6 +67,10 @@ export function NewReportPage() {
   const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   async function seal() {
+    if (isDemoSession()) {
+      setError("Sample data is read-only. Sign in to seal a real report.");
+      return;
+    }
     setSealing(true);
     setError(null);
     setProgress({});
@@ -75,23 +82,23 @@ export function NewReportPage() {
 
       current = "hash";
       mark("hash", "active");
-      await pause(250);
+      await pause(200); // the hash is computed with the ciphertext; this keeps the step readable
       mark("hash", "done");
 
       current = "key";
       mark("key", "active");
-      if (redlineConfig.enclavePublicKey) sealKeyToEnclave(sealed.keyHex, redlineConfig.enclavePublicKey);
-      else await pause(500); // preview: enclave key not configured yet
+      const sealedKeyHex = redlineConfig.enclavePublicKey ? sealKeyToEnclave(sealed.keyHex, sealed.contentHash, redlineConfig.enclavePublicKey) : undefined;
+      await pause(200);
       mark("key", "done");
 
       current = "chain";
       mark("chain", "active");
-      await pause(900); // preview: contract call is wired in with the backend
+      const report = await createReport({ title, repo: repo.trim(), severity, disclosureDays: Number(days), body, summary: summary.trim(), sealedKeyHex }, sealed);
       mark("chain", "done");
 
       toast.show({ tone: "success", title: "Report sealed", description: `Hash ${sealed.contentHash.slice(0, 10)}… registered.` });
-      await pause(500);
-      navigate("/app");
+      await pause(400);
+      navigate(`/app/reports/${report.id}`);
     } catch (e) {
       mark(current, "error");
       setError(e instanceof Error ? e.message : "Sealing failed. Nothing was sent.");
@@ -114,6 +121,7 @@ export function NewReportPage() {
           <InputField index={0} label="Title" icon={Bug} placeholder="Short, specific, no exploit details" value={title} onChange={setTitle} disabled={sealing} />
           <InputField index={1} label="Affected repository (optional)" icon={GitBranch} placeholder="owner/name" value={repo} onChange={setRepo} disabled={sealing}
             error={repoValid ? undefined : "Use the form owner/name"} />
+          <InputField index={2} label="Short summary (optional)" icon={Fingerprint} placeholder="Shown to invited people. No exploit details." value={summary} onChange={setSummary} disabled={sealing} />
         </InputGroup>
         <div className="grid gap-3 sm:grid-cols-2">
           <Select value={severity} onValueChange={(v) => setSeverity(v as Severity)} disabled={sealing}>

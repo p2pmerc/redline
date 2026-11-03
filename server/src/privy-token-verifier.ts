@@ -19,6 +19,8 @@ export function createPrivyVerifier(appId: string): TokenVerifier {
 
 /** Display names are cosmetic and sent by the client, so they are trimmed and stripped of control characters. */
 export function cleanName(raw: string | undefined): string {
-  const value = (raw ?? "").replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, 60);
+  let decoded = raw ?? "";
+  try { decoded = decodeURIComponent(decoded); } catch { /* keep the raw value */ }
+  const value = decoded.replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, 60);
   return value || "Signed-in user";
 }

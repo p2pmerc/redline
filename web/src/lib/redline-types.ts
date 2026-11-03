@@ -54,6 +54,8 @@ export interface NegotiationMessage {
   at: string;
   /** Hash that was logged on chain for this message. */
   hash: string;
+  /** True when this browser does not hold the key to read the message. */
+  locked?: boolean;
 }
 
 export interface EscrowState {
@@ -63,6 +65,14 @@ export interface EscrowState {
   contractId: string;
   pullRequestUrl?: string;
   mergeCheck: "pending" | "not_merged" | "merged" | "unknown";
+  /** "preview" while the testnet contract is not connected: the state machine runs, no funds move. */
+  mode?: "preview" | "testnet";
+}
+
+export interface ProposedTerms {
+  amountNear: number;
+  repo: string;
+  accepted: boolean;
 }
 
 export interface InviteRecipient {
@@ -70,6 +80,8 @@ export interface InviteRecipient {
   channel: "email" | "x" | "telegram" | "github";
   handle: string;
   status: "pending" | "redeemed" | "expired";
+  /** Only the researcher receives it. Part of the invite link. */
+  token?: string;
 }
 
 export interface Report {
@@ -93,4 +105,11 @@ export interface Report {
   messages: NegotiationMessage[];
   timeline: TimelineEvent[];
   contentHash: string;
+  terms?: ProposedTerms;
+  /** The report key is not in this browser, so the body cannot be shown. */
+  bodyLocked?: boolean;
+  publishedAt?: string;
+  evidenceHash?: string;
+  /** True for the built-in sample reports. */
+  sample?: boolean;
 }
