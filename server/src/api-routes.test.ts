@@ -1,0 +1,225 @@
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "./server-main.js";
+import { ReportStore } from "./report-store.js";
+import type { MergeAnswer } from "./escrow-ledger.js";
+
+const sha = (hex: string) => createHash("sha256").update(Buffer.from(hex, "hex")).digest("hex");
+
+function seal(text: string) {
+  const key = randomBytes(32);
+  const iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", key, iv);
+  const body = Buffer.concat([c.update(text, "utf8"), c.final()]);
+  const packed = Buffer.concat([iv, body, c.getAuthTag()]).toString("hex");
+  return { ciphertextHex: packed, contentHash: sha(packed), keyHex: key.toString("hex") };
+}
+
+let server: Server;
+let base: string;
+let clockMs: number;
+let answers: MergeAnswer[];
+
+beforeEach(async () => {
+  clockMs = Date.parse("2026-11-02T10:00:00Z");
+  answers = [];
+  const app = createApp({
+    config: { port: 0, dataFile: null, webDist: "/nonexistent", privyAppId: "app", ledgerMode: "preview", escrowContractId: "", enclavePublicKey: "" },
+    store: new ReportStore(null),
+    verifyToken: async (t) => { if (!t.startsWith("user-")) throw new Error("bad"); return t; },
+    mergeLookup: async () => answers.shift() ?? { status: "unknown" },
+    now: () => new Date(clockMs),
+  });
+  await new Promise<void>((r) => { server = app.listen(0, r); });
+  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
+});
+afterEach(() => new Promise<void>((r) => server.close(() => r())));
+
+async function call(user: string | null, method: string, path: string, body?: unknown) {
+  const res = await fetch(base + path, {
+    method,
+    headers: { "content-type": "application/json", ...(user ? { authorization: `Bearer ${user}`, "x-redline-name": user } : {}) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return { status: res.status, json: (await res.json()) as any };
+}
+
+async function newReport(text = "## Bug\nsomething secret") {
+  const sealed = seal(text);
+  const created = await call("user-alice", "POST", "/reports", {
+    title: "Auth bypass in login", severity: "high", repo: "acme/widgets", disclosureDays: 30, summary: "s",
+    ciphertextHex: sealed.ciphertextHex, contentHash: sealed.contentHash,
+  });
+  return { sealed, created };
+}
+
+async function joinTeam(id: string) {
+  const invite = await call("user-alice", "POST", `/reports/${id}/invites`, { channel: "email", handle: "sec@acme.dev" });
+  const token = invite.json.invites[0].token as string;
+  return call("user-bob", "POST", `/invites/${token}/redeem`);
+}
+
+describe("auth and access", () => {
+  it("rejects missing and bad tokens", async () => {
+    expect((await call(null, "GET", "/reports")).status).toBe(401);
+    expect((await call("nope", "GET", "/reports")).status).toBe(401);
+  });
+
+  it("hides reports from people who are not a party, with the same answer as missing ones", async () => {
+    const { created } = await newReport();
+    const other = await call("user-eve", "GET", `/reports/${created.json.id}`);
+    const missing = await call("user-eve", "GET", "/reports/rl_000000000000");
+    expect(other.status).toBe(404);
+    expect(other.json).toEqual(missing.json);
+  });
+});
+
+describe("sealed reports", () => {
+  it("stores only ciphertext and checks the hash", async () => {
+    const { created, sealed } = await newReport("top secret exploit details");
+    expect(created.status).toBe(201);
+    expect(JSON.stringify(created.json)).not.toContain("top secret");
+    expect(created.json.stage).toBe("sealed");
+    const bad = await call("user-alice", "POST", "/reports", {
+      title: "Another report", severity: "low", disclosureDays: 30, ciphertextHex: sealed.ciphertextHex, contentHash: "0".repeat(64),
+    });
+    expect(bad.status).toBe(400);
+  });
+
+  it("validates input", async () => {
+    const res = await call("user-alice", "POST", "/reports", { title: "x", severity: "nope" });
+    expect(res.status).toBe(400);
+  });
+
+  it("lists reports for the people on them, without ciphertext", async () => {
+    const { created } = await newReport();
+    await joinTeam(created.json.id);
+    const mine = await call("user-alice", "GET", "/reports");
+    const theirs = await call("user-bob", "GET", "/reports");
+    const nobody = await call("user-eve", "GET", "/reports");
+    expect(mine.json.reports).toHaveLength(1);
+    expect(theirs.json.reports[0].role).toBe("team");
+    expect(theirs.json.reports[0].ciphertextHex).toBeUndefined();
+    expect(nobody.json.reports).toHaveLength(0);
+  });
+});
+
+describe("invites and chat", () => {
+  it("keeps chat closed until the invite is redeemed, then stores ciphertext with a verified hash", async () => {
+    const { created } = await newReport();
+    const id = created.json.id as string;
+    const msg = seal("hello team");
+    expect((await call("user-alice", "POST", `/reports/${id}/messages`, { ciphertextHex: msg.ciphertextHex, hash: msg.contentHash })).status).toBe(409);
+    const joined = await joinTeam(id);
+    expect(joined.json.role).toBe("team");
+    expect(joined.json.invites[0].token).toBeUndefined();
+    const sent = await call("user-alice", "POST", `/reports/${id}/messages`, { ciphertextHex: msg.ciphertextHex, hash: msg.contentHash });
+    expect(sent.status).toBe(201);
+    expect(sent.json.messages[0].ciphertextHex).toBe(msg.ciphertextHex);
+    const forged = await call("user-bob", "POST", `/reports/${id}/messages`, { ciphertextHex: msg.ciphertextHex, hash: "1".repeat(64) });
+    expect(forged.status).toBe(400);
+  });
+
+  it("lets only one team account redeem, and never the researcher", async () => {
+    const { created } = await newReport();
+    const id = created.json.id as string;
+    await joinTeam(id);
+    const token = (await call("user-alice", "GET", `/reports/${id}`)).json.invites[0].token as string;
+    expect((await call("user-eve", "POST", `/invites/${token}/redeem`)).status).toBe(409);
+    expect((await call("user-alice", "POST", `/invites/${token}/redeem`)).status).toBe(400);
+    expect((await call("user-bob", "POST", `/invites/${token}/redeem`)).status).toBe(200);
+  });
+});
+
+describe("escrow flow on the preview ledger", () => {
+  async function agreed() {
+    const { created, sealed } = await newReport();
+    const id = created.json.id as string;
+    await joinTeam(id);
+    return { id, sealed };
+  }
+
+  it("enforces who may act at each step", async () => {
+    const { id } = await agreed();
+    expect((await call("user-alice", "POST", `/reports/${id}/terms`, { amountNear: 5, repo: "acme/widgets" })).status).toBe(403);
+    expect((await call("user-bob", "POST", `/reports/${id}/terms`, { amountNear: 5, repo: "acme/widgets" })).status).toBe(200);
+    expect((await call("user-bob", "POST", `/reports/${id}/terms/accept`)).status).toBe(403);
+    expect((await call("user-alice", "POST", `/reports/${id}/fund`)).status).toBe(403);
+    expect((await call("user-bob", "POST", `/reports/${id}/fund`)).status).toBe(409); // not accepted yet
+    expect((await call("user-alice", "POST", `/reports/${id}/terms/accept`)).json.stage).toBe("agreed");
+    expect((await call("user-bob", "POST", `/reports/${id}/fund`)).json.stage).toBe("funded");
+  });
+
+  it("pays only after two merged answers and rejects pull requests from other repos", async () => {
+    const { id } = await agreed();
+    await call("user-bob", "POST", `/reports/${id}/terms`, { amountNear: 5, repo: "acme/widgets" });
+    await call("user-alice", "POST", `/reports/${id}/terms/accept`);
+    await call("user-bob", "POST", `/reports/${id}/fund`);
+    expect((await call("user-alice", "POST", `/reports/${id}/pull-request`, { url: "https://github.com/evil/other/pull/1" })).status).toBe(400);
+    expect((await call("user-alice", "POST", `/reports/${id}/pull-request`, { url: "https://github.com/acme/widgets/pull/42" })).status).toBe(200);
+
+    answers = [{ status: "unknown" }];
+    expect((await call("user-bob", "POST", `/reports/${id}/check-merge`)).json.stage).toBe("funded");
+    answers = [{ status: "merged", mergeCommit: "a".repeat(40) }];
+    expect((await call("user-bob", "POST", `/reports/${id}/check-merge`)).json.stage).toBe("fix_merged");
+
+    answers = [{ status: "unknown" }];
+    const failed = await call("user-alice", "POST", `/reports/${id}/claim`);
+    expect(failed.json.stage).toBe("funded"); // fail closed, state restarts
+    answers = [{ status: "merged", mergeCommit: "a".repeat(40) }, { status: "merged", mergeCommit: "a".repeat(40) }];
+    await call("user-bob", "POST", `/reports/${id}/check-merge`);
+    expect((await call("user-bob", "POST", `/reports/${id}/claim`)).status).toBe(403);
+    const paid = await call("user-alice", "POST", `/reports/${id}/claim`);
+    expect(paid.json.stage).toBe("paid");
+    expect(paid.json.timeline.at(-1).kind).toBe("payout");
+  });
+
+  it("refunds only after expiry and only when the pull request is not merged", async () => {
+    const { id } = await agreed();
+    await call("user-bob", "POST", `/reports/${id}/terms`, { amountNear: 2, repo: "acme/widgets" });
+    await call("user-alice", "POST", `/reports/${id}/terms/accept`);
+    await call("user-bob", "POST", `/reports/${id}/fund`);
+    await call("user-alice", "POST", `/reports/${id}/pull-request`, { url: "https://github.com/acme/widgets/pull/7" });
+    expect((await call("user-bob", "POST", `/reports/${id}/refund`)).status).toBe(409);
+    clockMs += 31 * 86_400_000;
+    answers = [{ status: "merged", mergeCommit: "b".repeat(40) }];
+    expect((await call("user-bob", "POST", `/reports/${id}/refund`)).json.stage).toBe("funded");
+    answers = [{ status: "unknown" }];
+    expect((await call("user-bob", "POST", `/reports/${id}/refund`)).json.stage).toBe("funded");
+    answers = [{ status: "not_merged" }];
+    expect((await call("user-bob", "POST", `/reports/${id}/refund`)).json.stage).toBe("refunded");
+  });
+});
+
+describe("publishing", () => {
+  it("waits for the deadline, checks the key, and then shows only public data", async () => {
+    const { created, sealed } = await newReport("the full write-up");
+    const id = created.json.id as string;
+    await joinTeam(id);
+    const m = seal("private chat line");
+    await call("user-alice", "POST", `/reports/${id}/messages`, { ciphertextHex: m.ciphertextHex, hash: m.contentHash });
+
+    expect((await call("user-alice", "POST", `/reports/${id}/publish`, { body: "the full write-up", keyHex: sealed.keyHex })).status).toBe(409);
+    clockMs += 31 * 86_400_000;
+    expect((await call("user-bob", "POST", `/reports/${id}/publish`, { body: "the full write-up", keyHex: sealed.keyHex })).status).toBe(403);
+    expect((await call("user-alice", "POST", `/reports/${id}/publish`, { body: "something else", keyHex: sealed.keyHex })).status).toBe(400);
+    expect((await call("user-alice", "POST", `/reports/${id}/publish`, { body: "the full write-up", keyHex: "11".repeat(32) })).status).toBe(400);
+    const ok = await call("user-alice", "POST", `/reports/${id}/publish`, { body: "the full write-up", keyHex: sealed.keyHex });
+    expect(ok.json.stage).toBe("published");
+
+    const list = await call(null, "GET", "/public/disclosures");
+    expect(list.json.disclosures).toHaveLength(1);
+    const text = JSON.stringify(list.json);
+    expect(text).toContain("the full write-up");
+    expect(text).not.toContain(m.ciphertextHex);
+    expect(text).not.toContain("sec@acme.dev");
+    expect((await call(null, "GET", `/public/disclosures/${id}`)).status).toBe(200);
+  });
+
+  it("does not expose unpublished reports", async () => {
+    const { created } = await newReport();
+    expect((await call(null, "GET", `/public/disclosures/${created.json.id}`)).status).toBe(404);
+  });
+});
