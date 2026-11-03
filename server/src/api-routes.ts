@@ -3,18 +3,20 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { z } from "zod";
 import { cleanName, type Caller, type TokenVerifier } from "./privy-token-verifier.js";
 import type { ReportStore } from "./report-store.js";
+import { ProfileStore, type ResearcherProfile } from "./profile-store.js";
 import type { StoredReport, TimelineEntry } from "./report-records.js";
 import type { ServerConfig } from "./server-config.js";
 import type { MergeLookup } from "./github-merge-lookup.js";
 import * as ledger from "./escrow-ledger.js";
 import { LedgerError, type MergeAnswer } from "./escrow-ledger.js";
-import { partyView, publicView, roleOf, summaryView } from "./report-views.js";
+import { isPublic, partyView, publicView, roleOf, summaryView, type PublicAuthor } from "./report-views.js";
 import { openCiphertext } from "./report-ciphertext.js";
 import { ChainError, type ChainRelay } from "./chain-relay.js";
 
 export interface ApiDeps {
   config: ServerConfig;
   store: ReportStore;
+  profiles?: ProfileStore;
   verifyToken: TokenVerifier;
   mergeLookup: MergeLookup;
   /** Signs contract calls for the demo parties. Needed when the ledger mode is "testnet". */
@@ -24,6 +26,24 @@ export interface ApiDeps {
 
 const hex = (max: number) => z.string().regex(/^[0-9a-f]+$/i).min(2).max(max);
 const hash64 = z.string().regex(/^[0-9a-f]{64}$/i);
+
+const HANDLE = /^[a-z0-9][a-z0-9_-]{2,29}$/;
+const linkField = (hosts: string[]) => z.string().trim().max(200).optional().transform((v) => v || undefined).refine((v) => {
+  if (!v) return true;
+  try { const u = new URL(v); return u.protocol === "https:" && hosts.some((h) => u.hostname === h || u.hostname.endsWith(`.${h}`)); } catch { return false; }
+}, "Use a full https link on the right site.");
+const websiteField = z.string().trim().max(200).optional().transform((v) => v || undefined).refine((v) => {
+  if (!v) return true;
+  try { return new URL(v).protocol === "https:"; } catch { return false; }
+}, "Use a full https link.");
+const profileBody = z.object({
+  handle: z.string().trim().toLowerCase().regex(HANDLE, "3 to 30 characters: a-z, 0-9, dash or underscore."),
+  displayName: z.string().trim().min(2).max(60),
+  bio: z.string().trim().max(400).default(""),
+  skills: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
+  links: z.object({ github: linkField(["github.com"]), x: linkField(["x.com", "twitter.com"]), website: websiteField }).default({ github: undefined, x: undefined, website: undefined }),
+  avatarSeed: z.string().regex(/^[a-z0-9]{6,32}$/i),
+});
 
 const createReportBody = z.object({
   title: z.string().trim().min(4).max(140),
@@ -60,6 +80,12 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     if (!relay) throw new HttpError(501, "The testnet contract is not connected yet.");
     return relay;
   };
+  const profiles = deps.profiles ?? new ProfileStore(null);
+  const authorOf = (userId: string): PublicAuthor | undefined => {
+    const p = profiles.get(userId);
+    return p ? { handle: p.handle, displayName: p.displayName, avatarSeed: p.avatarSeed } : undefined;
+  };
+  const publicProfile = (p: ResearcherProfile) => ({ handle: p.handle, displayName: p.displayName, bio: p.bio, skills: p.skills, links: p.links, avatarSeed: p.avatarSeed, joinedAt: p.createdAt });
   const clock = deps.now ?? (() => new Date());
   const router = express.Router();
   const contractId = config.ledgerMode === "preview" ? "Preview ledger" : config.escrowContractId;
@@ -103,19 +129,54 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     res.json({ ledgerMode: config.ledgerMode, escrowContractId: config.escrowContractId, enclavePublicKey: config.enclavePublicKey, privyAppId: config.privyAppId });
   });
 
+  const publicItems = () => store.all().filter(isPublic).sort((a, b) => publicView(b).publishedAt.localeCompare(publicView(a).publishedAt));
+
   router.get("/public/disclosures", (_req, res) => {
-    const items = store.all().filter((r) => r.published).sort((a, b) => b.published!.at.localeCompare(a.published!.at)).map(publicView);
-    res.json({ disclosures: items });
+    res.json({ disclosures: publicItems().map((r) => publicView(r, authorOf(r.researcherId))) });
   });
 
   router.get("/public/disclosures/:id", (req, res) => {
     const report = store.get(String(req.params.id));
-    if (!report?.published) throw new HttpError(404, "This disclosure is not public.");
-    res.json(publicView(report));
+    if (!report || !isPublic(report)) throw new HttpError(404, "This disclosure is not public.");
+    res.json(publicView(report, authorOf(report.researcherId)));
+  });
+
+  router.get("/public/researchers/:handle", (req, res) => {
+    const profile = profiles.byHandle(String(req.params.handle));
+    if (!profile) throw new HttpError(404, "No researcher has that handle.");
+    const mine = publicItems().filter((r) => r.researcherId === profile.userId);
+    const paid = mine.filter((r) => r.status === "paid");
+    res.json({
+      profile: publicProfile(profile),
+      stats: {
+        reports: mine.length,
+        paid: paid.length,
+        disclosed: mine.filter((r) => !!r.published).length,
+        totalPaidNear: paid.reduce((sum, r) => sum + (r.escrow?.amountNear ?? 0), 0),
+      },
+      reports: mine.map((r) => publicView(r, authorOf(r.researcherId))),
+    });
   });
 
   // ------------------------------------------------------------------ authenticated
   router.use(requireAuth);
+
+  router.get("/profile", (req, res) => {
+    const p = profiles.get(caller(req).userId);
+    res.json({ profile: p ? publicProfile(p) : null });
+  });
+
+  router.put("/profile", (req, res) => {
+    const { userId } = caller(req);
+    const input = profileBody.parse(req.body);
+    const taken = profiles.byHandle(input.handle);
+    if (taken && taken.userId !== userId) throw new HttpError(409, "That handle is taken. Pick another.");
+    const now = clock().toISOString();
+    const existing = profiles.get(userId);
+    const next: ResearcherProfile = { userId, ...input, links: input.links, createdAt: existing?.createdAt ?? now, updatedAt: now };
+    profiles.save(next);
+    res.json({ profile: publicProfile(next) });
+  });
 
   router.get("/reports", (req, res) => {
     const { userId } = caller(req);

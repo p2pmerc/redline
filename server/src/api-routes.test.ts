@@ -209,6 +209,14 @@ describe("escrow flow on the preview ledger", () => {
     const paid = await call("user-alice", "POST", `/reports/${id}/claim`);
     expect(paid.json.stage).toBe("paid");
     expect(paid.json.timeline.at(-1).kind).toBe("payout");
+
+    // Paid but never unsealed: public with summary and payout, body stays sealed.
+    const pub = await call(null, "GET", `/public/disclosures/${id}`);
+    expect(pub.status).toBe(200);
+    expect(pub.json.outcome).toBe("fixed_and_paid");
+    expect(pub.json.bodyPublished).toBe(false);
+    expect(pub.json.body).toBe("");
+    expect(JSON.stringify(pub.json)).not.toContain("ciphertext");
   });
 
   it("refunds only after expiry and only when the pull request is not merged", async () => {
@@ -272,5 +280,42 @@ describe("avatar seeds", () => {
     expect(second.teamSeed).toMatch(/^[0-9a-f]{32}$/);
     expect(second.teamSeed).not.toBe(second.researcherSeed);
     expect((await call("user-bob", "GET", `/reports/${id}`)).json.teamSeed).toBe(second.teamSeed);
+  });
+});
+
+describe("researcher profiles and privacy", () => {
+  const profile = { handle: "ada", displayName: "Ada L", bio: "Finds bugs.", skills: ["rust", "wasm"], links: { github: "https://github.com/ada" }, avatarSeed: "abc123def456" };
+
+  it("saves a profile, keeps handles unique, and rejects bad links", async () => {
+    expect((await call(null, "GET", "/profile")).status).toBe(401);
+    expect((await call("user-alice", "GET", "/profile")).json.profile).toBeNull();
+    expect((await call("user-alice", "PUT", "/profile", profile)).status).toBe(200);
+    expect((await call("user-alice", "GET", "/profile")).json.profile.handle).toBe("ada");
+    expect((await call("user-bob", "PUT", "/profile", profile)).status).toBe(409);
+    expect((await call("user-alice", "PUT", "/profile", { ...profile, displayName: "Ada Lovelace" })).json.profile.displayName).toBe("Ada Lovelace");
+    expect((await call("user-alice", "PUT", "/profile", { ...profile, links: { github: "https://evil.example/ada" } })).status).toBe(400);
+    expect((await call("user-alice", "PUT", "/profile", { ...profile, handle: "A!" })).status).toBe(400);
+    const saved = (await call("user-alice", "GET", "/profile")).json.profile;
+    expect(JSON.stringify(saved)).not.toContain("user-alice");
+  });
+
+  it("lists only public reports on the profile page and keeps the workspace private", async () => {
+    await call("user-alice", "PUT", "/profile", profile);
+    const { created, sealed } = await newReport("the full write-up");
+    const id = created.json.id as string;
+    // A sealed report is invisible publicly and to other signed-in users.
+    expect((await call(null, "GET", "/public/researchers/ada")).json.reports).toHaveLength(0);
+    expect((await call("user-bob", "GET", "/reports")).json.reports).toHaveLength(0);
+    expect((await call("user-bob", "GET", `/reports/${id}`)).status).toBe(404);
+    expect((await call(null, "GET", "/public/disclosures")).json.disclosures).toHaveLength(0);
+
+    clockMs = Date.parse("2027-03-01T10:00:00Z");
+    await call("user-alice", "POST", `/reports/${id}/publish`, { body: "the full write-up", keyHex: sealed.keyHex });
+    const page = (await call(null, "GET", "/public/researchers/ada")).json;
+    expect(page.reports).toHaveLength(1);
+    expect(page.stats.disclosed).toBe(1);
+    expect(page.reports[0].researcherHandle).toBe("ada");
+    expect(page.profile.avatarSeed).toBe("abc123def456");
+    expect((await call(null, "GET", "/public/researchers/nobody")).status).toBe(404);
   });
 });

@@ -67,9 +67,17 @@ export function summaryView(report: StoredReport, role: Role, ledgerMode: string
   return { ...rest, messages: [] as never[] };
 }
 
-/** Public disclosure: only after the researcher unsealed it. No chat, no invites. */
-export function publicView(report: StoredReport) {
-  const published = report.published!;
+/** Shown publicly: unsealed by the researcher, or fixed with the escrow paid out. Nothing else, ever. */
+export const isPublic = (report: StoredReport): boolean => !!report.published || report.status === "paid";
+
+export interface PublicAuthor { handle: string; displayName: string; avatarSeed: string }
+
+/**
+ * Public view of a disclosed or paid report. A paid report that was never unsealed shows its summary and
+ * payout only; the body stays sealed. No chat, no invites.
+ */
+export function publicView(report: StoredReport, author?: PublicAuthor) {
+  const paidAt = report.timeline.find((t) => t.kind === "payout")?.at ?? report.updatedAt;
   return {
     id: report.id,
     title: report.title,
@@ -77,14 +85,18 @@ export function publicView(report: StoredReport) {
     repo: report.repo,
     severity: report.severity,
     summary: report.summary,
-    researcherSeed: avatarSeed(report.researcherId),
-    body: published.body,
-    publishedAt: published.at,
+    researcherSeed: author?.avatarSeed ?? avatarSeed(report.researcherId),
+    researcherHandle: author?.handle,
+    researcherName: author?.displayName,
+    body: report.published?.body ?? "",
+    bodyPublished: !!report.published,
+    publishedAt: report.published?.at ?? paidAt,
     createdAt: report.createdAt,
     contentHash: report.contentHash,
-    evidenceHash: published.evidenceHash,
+    evidenceHash: report.published?.evidenceHash,
     outcome: report.status === "paid" ? "fixed_and_paid" : report.status === "refunded" ? "refunded" : "disclosed",
     rewardNear: report.status === "paid" ? report.escrow?.amountNear : undefined,
-    timeline: report.timeline.filter((t) => t.kind !== "message" && t.kind !== "invite_sent" && t.kind !== "invite_redeemed" && t.kind !== "invite_revoked"),
+    pullRequestUrl: report.status === "paid" ? report.escrow?.pullRequestUrl : undefined,
+    timeline: report.timeline.filter((t) => t.kind !== "message" && t.kind !== "invite_sent" && t.kind !== "invite_redeemed" && t.kind !== "invite_revoked" && t.kind !== "terms_proposed"),
   };
 }

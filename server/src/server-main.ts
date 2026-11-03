@@ -7,6 +7,7 @@ import { createApiRouter } from "./api-routes.js";
 import { createMergeLookup } from "./github-merge-lookup.js";
 import { createPrivyVerifier } from "./privy-token-verifier.js";
 import { ReportStore } from "./report-store.js";
+import { ProfileStore } from "./profile-store.js";
 import { relayFromEnv } from "./chain-relay.js";
 import { loadConfig, type ServerConfig } from "./server-config.js";
 import type { ApiDeps } from "./api-routes.js";
@@ -30,7 +31,8 @@ export function createApp(deps: ApiDeps): express.Express {
 
 export function startServer(config: ServerConfig = loadConfig()) {
   const store = new ReportStore(config.dataFile);
-  const app = createApp({ config, store, verifyToken: createPrivyVerifier(config.privyAppId), mergeLookup: createMergeLookup(undefined, config.githubToken), relay: config.ledgerMode === "testnet" ? relayFromEnv(process.env, config.escrowContractId) : undefined });
+  const profiles = new ProfileStore(config.dataFile ? path.join(path.dirname(config.dataFile), "profiles.json") : null);
+  const app = createApp({ config, store, profiles, verifyToken: createPrivyVerifier(config.privyAppId), mergeLookup: createMergeLookup(undefined, config.githubToken), relay: config.ledgerMode === "testnet" ? relayFromEnv(process.env, config.escrowContractId) : undefined });
   return app.listen(config.port, () => console.log(`redline server on :${config.port} (${config.ledgerMode} ledger)`));
 }
 
