@@ -3,8 +3,9 @@
 //! Actions:
 //!   pubkey          the enclave's ECIES public key
 //!   merge_check     fail-closed PR merge status, answers in the exact shape the escrow contract reads
-//!   reveal_report   a party of the report gets the AES key, re-sealed to their one-time browser key
-//!   chat_key        a party gets the report's negotiation key, re-sealed the same way
+//!   reveal_report   the researcher or an invited, verified, non-revoked member gets the AES key,
+//!                   re-sealed to their one-time browser key (see report_access_control)
+//!   chat_key        the same people get the report's negotiation key, re-sealed the same way
 //!   publish_key     after the researcher published on chain, anyone gets the key in the clear
 //!   verify_identity prove the caller holds an email, X, Telegram, GitHub or NEAR identity
 
@@ -14,6 +15,7 @@ use crate::http_client::HttpFetcher;
 use crate::near_chain_reader::{ChainView, ReportView};
 use crate::nep413_wallet_login::WalletProof;
 use crate::privy_identity_check::SignedInUser;
+use crate::report_access_control::{authorize, ProvenCaller};
 use crate::sealed_negotiation::chat_key_for_party;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -31,8 +33,8 @@ pub struct CallerAuth {
 }
 
 pub trait CallerIdentity {
-    /// Returns the NEAR account the caller has proven they control.
-    fn proven_account(&self, auth: &CallerAuth) -> Result<String, String>;
+    /// Everything the caller has proven: their Privy-linked identities, or a wallet proof.
+    fn prove(&self, auth: &CallerAuth) -> Result<ProvenCaller, String>;
     fn signed_in_user(&self, id_token: &str) -> Result<SignedInUser, String>;
 }
 
@@ -96,11 +98,9 @@ fn handle(request: Request, services: &Services) -> Result<Value, String> {
             Ok(serde_json::to_value(answer).map_err(|_| "could not encode the answer".to_string())?)
         }
         Request::RevealReport { report_id, sealed_key, eph_pub, auth } => {
-            let account = services.identity.proven_account(&auth)?;
+            let caller = services.identity.prove(&auth)?;
             let report = load_report(services, &report_id)?;
-            if !report.is_party(&account) {
-                return Err("only the researcher and the team can read this report".into());
-            }
+            authorize(&report, &caller)?;
             let secret = crate::enclave_key::derive_ecies_secret(master(services)?)?;
             let envelope = open_envelope(&secret, &sealed_key)?;
             if !envelope_matches_hash(&envelope, &report.content_hash) {
@@ -110,9 +110,9 @@ fn handle(request: Request, services: &Services) -> Result<Value, String> {
             Ok(ok(json!({ "sealed_key": sealed, "content_hash": report.content_hash })))
         }
         Request::ChatKey { report_id, eph_pub, auth } => {
-            let account = services.identity.proven_account(&auth)?;
+            let caller = services.identity.prove(&auth)?;
             let report = load_report(services, &report_id)?;
-            let sealed = chat_key_for_party(master(services)?, &report_id, &report, &account, &eph_pub)?;
+            let sealed = chat_key_for_party(master(services)?, &report_id, &report, &caller, &eph_pub)?;
             Ok(ok(json!({ "sealed_chat_key": sealed })))
         }
         Request::PublishKey { report_id, sealed_key } => {
@@ -144,7 +144,9 @@ mod tests {
     use super::*;
     use crate::enclave_report_sealing::KeyEnvelope;
     use crate::http_client::Header;
+    use crate::near_chain_reader::MemberInvite;
     use crate::privy_identity_check::LinkedIdentity;
+    use crate::report_access_control::invite_hash;
 
     struct NoNet;
     impl HttpFetcher for NoNet {
@@ -166,20 +168,27 @@ mod tests {
         }
     }
 
-    /// Anyone whose `account` field is non-empty "proves" it, and Privy users hold bob's wallet and email.
-    struct TrustingIdentity;
-    impl CallerIdentity for TrustingIdentity {
-        fn proven_account(&self, auth: &CallerAuth) -> Result<String, String> {
-            auth.account.clone().ok_or_else(|| "sign in first".to_string())
+    /// Stand-in for Privy: the token text says who signed in. "forged" fails like a bad signature.
+    struct FakePrivy;
+    fn user_for(token: &str) -> Result<SignedInUser, String> {
+        let identities = match token {
+            "bob" | "t" => vec![("near", "bob.testnet"), ("email", "bob@example.com")],
+            "ada" => vec![("email", "ada@acme.com"), ("github", "ada")],
+            "eve" => vec![("email", "eve@evil.com"), ("near", "eve.testnet")],
+            _ => return Err("sign-in token has the wrong shape".into()),
+        };
+        Ok(SignedInUser {
+            user_id: token.into(),
+            identities: identities.into_iter().map(|(k, h)| LinkedIdentity { kind: k.into(), handle: h.into() }).collect(),
+        })
+    }
+    impl CallerIdentity for FakePrivy {
+        fn prove(&self, auth: &CallerAuth) -> Result<ProvenCaller, String> {
+            let token = auth.id_token.as_deref().ok_or("sign in first")?;
+            Ok(ProvenCaller { identities: user_for(token)?.identities })
         }
-        fn signed_in_user(&self, _: &str) -> Result<SignedInUser, String> {
-            Ok(SignedInUser {
-                user_id: "u".into(),
-                identities: vec![
-                    LinkedIdentity { kind: "near".into(), handle: "bob.testnet".into() },
-                    LinkedIdentity { kind: "email".into(), handle: "bob@example.com".into() },
-                ],
-            })
+        fn signed_in_user(&self, token: &str) -> Result<SignedInUser, String> {
+            user_for(token)
         }
     }
 
@@ -187,11 +196,18 @@ mod tests {
     const HASH: &str = "abababababababababababababababababababababababababababababababab";
 
     fn view(published: Option<u64>) -> ReportView {
+        view_with(published, Some(false))
+    }
+
+    /// `ada@acme.com` is invited unless `revoked` is None; `Some(true)` means the invite was withdrawn.
+    fn view_with(published: Option<u64>, revoked: Option<bool>) -> ReportView {
         ReportView {
             researcher: "bob.testnet".into(),
             content_hash: HASH.into(),
             disclosure_deadline_ns: 1,
-            team: Some("acme.testnet".into()),
+            members: revoked
+                .map(|r| vec![MemberInvite { id_hash: invite_hash("email", "ada@acme.com"), revoked: r }])
+                .unwrap_or_default(),
             published_at_ns: published,
         }
     }
@@ -200,7 +216,7 @@ mod tests {
         let services = Services {
             http: &NoNet,
             chain,
-            identity: &TrustingIdentity,
+            identity: &FakePrivy,
             master: Ok(MASTER.to_vec()),
             github_token: None,
         };
@@ -241,28 +257,59 @@ mod tests {
         assert_eq!(out["pull_request"], 3);
     }
 
-    #[test]
-    fn a_party_can_reveal_the_report_key_to_their_browser() {
-        let (browser_secret, browser_public) = browser();
-        let out = run(&FixedChain(Some(view(None))), json!({
+    fn reveal(chain: &FixedChain, token: &str) -> Value {
+        let (_, browser_public) = browser();
+        run(chain, json!({
             "action": "reveal_report", "report_id": "rl-1", "sealed_key": sealed_key(HASH),
-            "eph_pub": browser_public, "account": "acme.testnet"
-        }));
-        assert_eq!(out["success"], true, "{out}");
-        let sealed = out["result"]["sealed_key"].as_str().unwrap();
-        let plain = ecies::decrypt(&browser_secret, &hex::decode(sealed).unwrap()).unwrap();
-        assert_eq!(String::from_utf8(plain).unwrap(), "22".repeat(32));
+            "eph_pub": browser_public, "id_token": token
+        }))
     }
 
     #[test]
-    fn strangers_and_unregistered_reports_get_nothing() {
+    fn the_researcher_and_an_invited_member_can_reveal_the_report_key() {
+        for token in ["bob", "ada"] {
+            let (browser_secret, browser_public) = browser();
+            let out = run(&FixedChain(Some(view(None))), json!({
+                "action": "reveal_report", "report_id": "rl-1", "sealed_key": sealed_key(HASH),
+                "eph_pub": browser_public, "id_token": token
+            }));
+            assert_eq!(out["success"], true, "{token}: {out}");
+            let sealed = out["result"]["sealed_key"].as_str().unwrap();
+            let plain = ecies::decrypt(&browser_secret, &hex::decode(sealed).unwrap()).unwrap();
+            assert_eq!(String::from_utf8(plain).unwrap(), "22".repeat(32));
+        }
+    }
+
+    #[test]
+    fn an_uninvited_user_is_denied_the_report_key() {
+        let out = reveal(&FixedChain(Some(view(None))), "eve");
+        assert_eq!(out["success"], false);
+        assert!(out["result"].is_null(), "no key material in a denial: {out}");
+    }
+
+    #[test]
+    fn a_revoked_invite_is_denied_the_report_key() {
+        let chain = FixedChain(Some(view_with(None, Some(true))));
+        assert_eq!(reveal(&chain, "ada")["success"], false);
+        assert_eq!(reveal(&chain, "bob")["success"], true, "the researcher keeps access");
+    }
+
+    #[test]
+    fn claiming_an_account_without_a_valid_sign_in_gets_nothing() {
         let (_, browser_public) = browser();
-        let input = |account: &str| json!({
+        let chain = FixedChain(Some(view(None)));
+        // Naming bob's account is not proof. The caller needs a sign-in that holds it.
+        let named = run(&chain, json!({
             "action": "reveal_report", "report_id": "rl-1", "sealed_key": sealed_key(HASH),
-            "eph_pub": browser_public, "account": account
-        });
-        assert_eq!(run(&FixedChain(Some(view(None))), input("eve.testnet"))["success"], false);
-        assert_eq!(run(&FixedChain(None), input("bob.testnet"))["success"], false);
+            "eph_pub": browser_public, "account": "bob.testnet"
+        }));
+        assert_eq!(named["success"], false);
+        assert_eq!(reveal(&chain, "forged")["success"], false);
+    }
+
+    #[test]
+    fn an_unregistered_report_gives_nothing() {
+        assert_eq!(reveal(&FixedChain(None), "bob")["success"], false);
     }
 
     #[test]
@@ -270,7 +317,7 @@ mod tests {
         let (_, browser_public) = browser();
         let out = run(&FixedChain(Some(view(None))), json!({
             "action": "reveal_report", "report_id": "rl-1", "sealed_key": sealed_key(&"cd".repeat(32)),
-            "eph_pub": browser_public, "account": "bob.testnet"
+            "eph_pub": browser_public, "id_token": "bob"
         }));
         assert_eq!(out["success"], false);
     }
@@ -284,11 +331,28 @@ mod tests {
     }
 
     #[test]
-    fn chat_key_is_for_parties_only() {
+    fn chat_key_is_for_the_researcher_and_invited_members_only() {
         let (_, browser_public) = browser();
-        let input = |account: &str| json!({"action": "chat_key", "report_id": "rl-1", "eph_pub": browser_public, "account": account});
-        assert_eq!(run(&FixedChain(Some(view(None))), input("bob.testnet"))["success"], true);
-        assert_eq!(run(&FixedChain(Some(view(None))), input("eve.testnet"))["success"], false);
+        let ask = |chain: &FixedChain, token: &str| {
+            run(chain, json!({"action": "chat_key", "report_id": "rl-1", "eph_pub": browser_public, "id_token": token}))
+        };
+        let open = FixedChain(Some(view(None)));
+        assert_eq!(ask(&open, "bob")["success"], true);
+        assert_eq!(ask(&open, "ada")["success"], true);
+        assert_eq!(ask(&open, "eve")["success"], false);
+        let revoked = FixedChain(Some(view_with(None, Some(true))));
+        assert_eq!(ask(&revoked, "ada")["success"], false);
+        assert_eq!(ask(&revoked, "bob")["success"], false, "nobody left to talk to");
+        let nobody_invited = FixedChain(Some(view_with(None, None)));
+        assert_eq!(ask(&nobody_invited, "ada")["success"], false);
+    }
+
+    #[test]
+    fn after_publication_the_public_key_endpoint_needs_no_sign_in_but_reveal_still_does() {
+        let chain = FixedChain(Some(view(Some(99))));
+        assert_eq!(reveal(&chain, "eve")["success"], false);
+        let public = run(&chain, json!({"action": "publish_key", "report_id": "rl-1", "sealed_key": sealed_key(HASH)}));
+        assert_eq!(public["success"], true);
     }
 
     #[test]
@@ -304,7 +368,7 @@ mod tests {
     #[test]
     fn a_missing_master_secret_is_an_error_not_a_panic() {
         let chain = FixedChain(None);
-        let services = Services { http: &NoNet, chain: &chain, identity: &TrustingIdentity, master: Err("missing".into()), github_token: None };
+        let services = Services { http: &NoNet, chain: &chain, identity: &FakePrivy, master: Err("missing".into()), github_token: None };
         assert_eq!(route(r#"{"action":"pubkey"}"#, &services)["success"], false);
     }
 }

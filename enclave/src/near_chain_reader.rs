@@ -18,16 +18,18 @@ pub struct ReportView {
     pub researcher: String,
     pub content_hash: String,
     pub disclosure_deadline_ns: u64,
+    /// Readers the researcher invited, as identity hashes. See `report_access_control`.
     #[serde(default)]
-    pub team: Option<String>,
+    pub members: Vec<MemberInvite>,
     #[serde(default)]
     pub published_at_ns: Option<u64>,
 }
 
-impl ReportView {
-    pub fn is_party(&self, account: &str) -> bool {
-        self.researcher == account || self.team.as_deref() == Some(account)
-    }
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub struct MemberInvite {
+    pub id_hash: String,
+    #[serde(default)]
+    pub revoked: bool,
 }
 
 pub trait ChainView {
@@ -121,11 +123,11 @@ mod tests {
 
     #[test]
     fn reads_a_report_record() {
-        let record = r#"{"researcher":"bob.testnet","content_hash":"aa","disclosure_deadline_ns":5,"team":"acme.testnet","status":"Funded","extra":1}"#;
+        let record = r#"{"researcher":"bob.testnet","content_hash":"aa","disclosure_deadline_ns":5,"team":"acme.testnet","members":[{"id_hash":"cc","revoked":true}],"status":"Funded","extra":1}"#;
         let f = Canned(200, rpc_result(record));
         let view = chain(&f).get_report("rl-1").unwrap().unwrap();
-        assert!(view.is_party("bob.testnet") && view.is_party("acme.testnet"));
-        assert!(!view.is_party("eve.testnet"));
+        assert_eq!(view.researcher, "bob.testnet");
+        assert_eq!(view.members, vec![MemberInvite { id_hash: "cc".into(), revoked: true }]);
     }
 
     #[test]

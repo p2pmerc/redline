@@ -6,8 +6,8 @@ Rust worker for OutLayer (`wasm32-wasip2`, runs in an Intel TDX enclave). JSON i
 | --- | --- | --- |
 | `pubkey` | anyone | ECIES public key browsers seal report keys to |
 | `merge_check` | anyone (the escrow contract calls it) | Fail-closed PR check, answers `merged`, `not_merged` or `unknown` |
-| `reveal_report` | researcher or team | AES key re-sealed to a one-time browser key |
-| `chat_key` | researcher or team | Negotiation key for the report, re-sealed |
+| `reveal_report` | researcher or an invited member | AES key re-sealed to a one-time browser key |
+| `chat_key` | researcher or an invited member | Negotiation key for the report, re-sealed |
 | `publish_key` | anyone, after the researcher published on chain | Key in the clear so the report can be verified |
 | `verify_identity` | signed-in user | Proves the Privy user holds an email, X, Telegram, GitHub or NEAR identity |
 
@@ -27,3 +27,12 @@ cargo test
 cargo build --release --target wasm32-wasip2
 echo '{"action":"merge_check","repo":"octocat/Hello-World","pull_request":6}' | wasmtime run -S http target/wasm32-wasip2/release/redline-enclave.wasm
 ```
+
+## Who can read a report
+
+Decided in `src/report_access_control.rs`, from the escrow contract record and the caller's Privy sign-in, both
+checked inside the enclave. Allowed: the researcher (a NEAR account linked to the verified sign-in matches the one on
+chain) and members the researcher invited on chain (`invite_member`, stored as a hash of `kind:handle`) whose verified
+sign-in holds that identity and whose invite is not revoked. Denied: everyone else, the server, and the operator.
+After the researcher publishes, `publish_key` serves the key to the public by design. Tests cover uninvited users,
+revoked invites, forged sign-ins, bare account claims and a revoked identity next to a still-listed one.

@@ -8,12 +8,14 @@ mod http_client;
 mod near_chain_reader;
 mod nep413_wallet_login;
 mod privy_identity_check;
+mod report_access_control;
 mod sealed_negotiation;
 
 use action_router::{CallerAuth, CallerIdentity, Services};
 use http_client::{HostHttp, HttpFetcher};
 use near_chain_reader::RpcChain;
-use privy_identity_check::SignedInUser;
+use privy_identity_check::{LinkedIdentity, SignedInUser};
+use report_access_control::ProvenCaller;
 use std::io::{Read, Write};
 
 /// Identity checks backed by Privy and NEAR, running from inside the worker.
@@ -30,22 +32,17 @@ fn now_ms() -> u64 {
 }
 
 impl CallerIdentity for LiveIdentity<'_> {
-    fn proven_account(&self, auth: &CallerAuth) -> Result<String, String> {
+    fn prove(&self, auth: &CallerAuth) -> Result<ProvenCaller, String> {
         if let Some(proof) = &auth.wallet {
             let account = nep413_wallet_login::wallet_login(proof, self.chain, now_ms())?;
             return match auth.account.as_deref() {
                 Some(claimed) if claimed.to_lowercase() != account => Err("the wallet belongs to another account".into()),
-                _ => Ok(account),
+                _ => Ok(ProvenCaller { identities: vec![LinkedIdentity { kind: "near".into(), handle: account }] }),
             };
         }
+        // Everything the caller is allowed to be comes from Privy's own record of their sign-in.
         let token = auth.id_token.as_deref().ok_or("sign in first")?;
-        let claimed = auth.account.as_deref().ok_or("say which NEAR account you are using")?.to_lowercase();
-        let user = privy_identity_check::sign_in(self.http, token)?;
-        if user.holds("near", &claimed) {
-            Ok(claimed)
-        } else {
-            Err("this sign-in does not hold that NEAR account".into())
-        }
+        Ok(ProvenCaller { identities: privy_identity_check::sign_in(self.http, token)?.identities })
     }
 
     fn signed_in_user(&self, id_token: &str) -> Result<SignedInUser, String> {
