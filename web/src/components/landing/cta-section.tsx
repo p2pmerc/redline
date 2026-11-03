@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { RedlineWordmark } from "@/components/redline-logo";
 import { Reveal } from "./reveal";
@@ -32,8 +32,8 @@ export function SiteFooter() {
           <p className="mt-2 text-caption text-muted-foreground">Sealed disclosure and PR-merge bounties. NEAR testnet only.</p>
         </div>
         <nav className="flex items-center gap-4 text-caption text-muted-foreground" aria-label="Footer">
-          <a className="hover:text-foreground" href="#how-it-works">How it works</a>
-          <a className="hover:text-foreground" href="#security">Security</a>
+          <Link className="hover:text-foreground" to={{ pathname: "/", hash: "#how-it-works" }}>How it works</Link>
+          <Link className="hover:text-foreground" to={{ pathname: "/", hash: "#security" }}>Security</Link>
         </nav>
       </div>
     </footer>

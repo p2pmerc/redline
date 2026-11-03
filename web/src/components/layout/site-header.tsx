@@ -6,14 +6,19 @@ import { Button } from "@/components/ui/button";
 import { RedlineWordmark } from "@/components/redline-logo";
 import { ThemeToggle } from "./theme-toggle";
 
+/**
+ * Landing-page sections. These are router links to "/" plus a hash, never bare
+ * "#id" anchors: a bare anchor on another route only rewrites the URL and the
+ * page never changes. <ScrollManager /> does the scrolling once "/" has rendered.
+ */
 const links = [
-  { href: "#how-it-works", label: "How it works" },
-  { href: "#pipeline", label: "Pipeline" },
-  { href: "#security", label: "Security" },
-  { href: "#faq", label: "FAQ" },
+  { to: { pathname: "/", hash: "#how-it-works" }, label: "How it works" },
+  { to: { pathname: "/", hash: "#pipeline" }, label: "Pipeline" },
+  { to: { pathname: "/", hash: "#security" }, label: "Security" },
+  { to: { pathname: "/", hash: "#faq" }, label: "FAQ" },
 ];
 
-/** Public pages that exist on every route, unlike the landing-page anchors above. */
+/** Public pages that exist on every route, unlike the landing-page sections above. */
 const pages = [
   { to: "/disclosures", label: "Disclosures" },
   { to: "/leaderboard", label: "Leaderboard" },
@@ -30,9 +35,9 @@ export function SiteHeader() {
         </Link>
         <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
           {links.map((l) => (
-            <a key={l.href} href={l.href} className="rounded-lg px-3 py-1.5 text-subtitle text-muted-foreground transition-colors hover:bg-hover hover:text-foreground">
+            <Link key={l.label} to={l.to} className="rounded-lg px-3 py-1.5 text-subtitle text-muted-foreground transition-colors hover:bg-hover hover:text-foreground">
               {l.label}
-            </a>
+            </Link>
           ))}
           {pages.map((l) => (
             <Link key={l.to} to={l.to} className="rounded-lg px-3 py-1.5 text-subtitle text-muted-foreground transition-colors hover:bg-hover hover:text-foreground">
@@ -61,9 +66,9 @@ export function SiteHeader() {
           >
             <div className="flex flex-col p-3">
               {links.map((l) => (
-                <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-subtitle hover:bg-hover">
+                <Link key={l.label} to={l.to} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-subtitle hover:bg-hover">
                   {l.label}
-                </a>
+                </Link>
               ))}
               {pages.map((l) => (
                 <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-subtitle hover:bg-hover">

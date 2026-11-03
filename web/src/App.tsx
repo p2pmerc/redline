@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Route, Routes } from "react-router-dom";
+import { ScrollManager } from "@/components/layout/scroll-manager";
 import { LandingPage } from "@/pages/landing-page";
 import { AuthGate } from "@/components/app/auth-gate";
 import { ReportPageSkeleton } from "@/components/feedback/skeleton";
@@ -18,6 +19,7 @@ const ReportDetailPage = lazy(() => import("@/pages/app/report-detail-page").the
 export function App() {
   return (
     <Suspense fallback={<ReportPageSkeleton />}>
+    <ScrollManager />
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/disclosures" element={<DisclosuresPage />} />
