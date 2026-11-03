@@ -1,5 +1,4 @@
 import { useNavigate } from "react-router-dom";
-import { GithubLogo } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { RedlineWordmark } from "@/components/redline-logo";
 import { Reveal } from "./reveal";
@@ -35,9 +34,6 @@ export function SiteFooter() {
         <nav className="flex items-center gap-4 text-caption text-muted-foreground" aria-label="Footer">
           <a className="hover:text-foreground" href="#how-it-works">How it works</a>
           <a className="hover:text-foreground" href="#security">Security</a>
-          <a className="inline-flex items-center gap-1 hover:text-foreground" href="https://github.com/zer0plugyut-afk/redline" target="_blank" rel="noreferrer">
-            <GithubLogo size={14} /> Source
-          </a>
         </nav>
       </div>
     </footer>
