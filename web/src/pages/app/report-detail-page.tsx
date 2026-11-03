@@ -8,11 +8,15 @@ import { ReportEditor } from "@/components/report/report-editor";
 import { StageStepper } from "@/components/report/stage-stepper";
 import { EscrowPanel } from "@/components/report/escrow-panel";
 import { InvitePanel } from "@/components/report/invite-panel";
+import { ReportKeyPanel } from "@/components/report/report-key-panel";
+import { PublishPanel } from "@/components/report/publish-panel";
 import { SealedChat } from "@/components/report/sealed-chat";
 import { ActivityTimeline } from "@/components/report/activity-timeline";
 import { ReportPageSkeleton } from "@/components/feedback/skeleton";
 import { ErrorState } from "@/components/feedback/empty-state";
 import { useToast } from "@/components/feedback/toast-provider";
+import { ProfileAvatar } from "@/components/ui/profile-avatar";
+import { peopleOf } from "@/lib/report-people";
 import { getReport } from "@/lib/data-source";
 import { useAsync } from "@/lib/use-async";
 import { exportMarkdown, exportPdf } from "@/lib/report-export";
@@ -31,7 +35,7 @@ export function ReportDetailPage() {
       <ErrorState message={error?.message ?? "Report not found."} onRetry={reload} />
     </div>
   );
-  return <ReportView report={data} />;
+  return <ReportView key={data.id} initial={data} reload={reload} />;
 }
 
 function BackLink() {
@@ -42,11 +46,13 @@ function BackLink() {
   );
 }
 
-function ReportView({ report }: { report: Report }) {
+function ReportView({ initial, reload }: { initial: Report; reload: () => void }) {
+  const [report, setReport] = useState(initial);
   const [tab, setTab] = useState(0);
   const [exporting, setExporting] = useState<null | "md" | "pdf">(null);
   const toast = useToast();
   const left = daysUntil(report.disclosureDeadline);
+  const people = peopleOf(report);
 
   async function doExport(kind: "md" | "pdf") {
     setExporting(kind);
@@ -71,6 +77,23 @@ function ReportView({ report }: { report: Report }) {
           <Badge color="gray"><Lock size={11} /> Sealed</Badge>
         </div>
         <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight">{report.title}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          {[people.researcher, people.team].map((person, i) =>
+            person ? (
+              <span key={i} className="inline-flex items-center gap-2 text-subtitle">
+                <ProfileAvatar size="md" name={person.name} seed={person.seed} />
+                <span className="leading-tight">
+                  <span className="block font-medium">{person.name}</span>
+                  <span className="block text-caption capitalize text-muted-foreground">{person.role === "team" ? "Security team" : "Researcher"}</span>
+                </span>
+              </span>
+            ) : (
+              <span key={i} className="inline-flex items-center gap-2 text-caption text-muted-foreground">
+                <ProfileAvatar size="md" name="?" /> No team member has joined yet
+              </span>
+            ),
+          )}
+        </div>
         <div className="flex flex-wrap gap-x-5 gap-y-1 text-caption text-muted-foreground">
           <span className="inline-flex items-center gap-1.5"><Clock size={14} /> Updated {relativeTime(report.updatedAt)}</span>
           <span className="inline-flex items-center gap-1.5"><Megaphone size={14} /> {left > 0 ? `Public ${shortDate(report.disclosureDeadline)} (${left}d)` : "Disclosure window open"}</span>
@@ -93,19 +116,23 @@ function ReportView({ report }: { report: Report }) {
           {tab === 0 && (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" size="compact" leadingIcon={FileMd} loading={exporting === "md"} onClick={() => doExport("md")}>Export .md</Button>
-                <Button variant="secondary" size="compact" leadingIcon={FilePdf} loading={exporting === "pdf"} onClick={() => doExport("pdf")}>Export PDF</Button>
+                <Button variant="secondary" size="compact" leadingIcon={FileMd} disabled={!!report.bodyLocked} loading={exporting === "md"} onClick={() => doExport("md")}>Export .md</Button>
+                <Button variant="secondary" size="compact" leadingIcon={FilePdf} disabled={!!report.bodyLocked} loading={exporting === "pdf"} onClick={() => doExport("pdf")}>Export PDF</Button>
               </div>
-              <ReportEditor value={report.body} editable={false} />
+              {report.bodyLocked
+                ? <div className="flex items-center gap-2 rounded-2xl bg-surface-2 p-6 text-body text-muted-foreground"><Lock size={16} /> Encrypted. Add the report key to read it.</div>
+                : <ReportEditor value={report.body} editable={false} />}
             </div>
           )}
-          {tab === 1 && <SealedChat messages={report.messages} role={report.role} counterparty={report.counterparty} locked={report.invites.every((i) => i.status !== "redeemed")} />}
+          {tab === 1 && <SealedChat report={report} onChange={setReport} />}
           {tab === 2 && <div className="rounded-2xl bg-surface-3 p-3 shadow-surface-2"><ActivityTimeline events={report.timeline} /></div>}
         </div>
 
         <div className="space-y-4">
-          <EscrowPanel report={report} />
-          <InvitePanel invites={report.invites} canInvite={report.role === "researcher"} />
+          <ReportKeyPanel report={report} onUnlocked={reload} />
+          <EscrowPanel report={report} onChange={setReport} />
+          <InvitePanel report={report} onChange={setReport} />
+          <PublishPanel report={report} onChange={setReport} />
           <div className="flex items-start gap-3 rounded-2xl bg-surface-2 p-4 text-caption text-muted-foreground">
             <ShieldCheck size={18} className="mt-0.5 shrink-0 text-foreground" />
             <p>The body is encrypted in your browser. Only the enclave can unseal the key, and only for people it has verified.</p>

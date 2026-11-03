@@ -14,6 +14,8 @@ interface PartyView {
   stage: ReportStage;
   role: ReportRole;
   counterparty: string;
+  researcherSeed?: string;
+  teamSeed?: string;
   createdAt: string;
   updatedAt: string;
   disclosureDeadline: string;
@@ -43,6 +45,7 @@ interface PublicView {
   evidenceHash: string;
   outcome: "fixed_and_paid" | "refunded" | "disclosed";
   rewardNear?: number;
+  researcherSeed?: string;
   timeline: TimelineEvent[];
 }
 
@@ -73,7 +76,7 @@ async function toReport(view: PartyView): Promise<Report> {
   }));
   return {
     id: view.id, title: view.title, target: view.target, repo: view.repo, severity: view.severity, stage: view.stage, role: view.role,
-    counterparty: view.counterparty, createdAt: view.createdAt, updatedAt: view.updatedAt, disclosureDeadline: view.disclosureDeadline,
+    counterparty: view.counterparty, researcherSeed: view.researcherSeed, teamSeed: view.teamSeed, createdAt: view.createdAt, updatedAt: view.updatedAt, disclosureDeadline: view.disclosureDeadline,
     rewardNear: view.rewardNear, summary: view.summary, body, bodyLocked, escrow: view.escrow, terms: view.terms, invites: view.invites,
     messages, timeline: view.timeline, contentHash: view.contentHash, publishedAt: view.published?.at, evidenceHash: view.published?.evidenceHash,
   };
@@ -82,7 +85,7 @@ async function toReport(view: PartyView): Promise<Report> {
 function fromPublic(view: PublicView): Report {
   return {
     id: view.id, title: view.title, target: view.target || "Unnamed project", repo: view.repo, severity: view.severity,
-    stage: "published", role: "researcher", counterparty: "", createdAt: view.createdAt, updatedAt: view.publishedAt,
+    stage: "published", role: "researcher", counterparty: "", researcherSeed: view.researcherSeed, createdAt: view.createdAt, updatedAt: view.publishedAt,
     disclosureDeadline: view.publishedAt, rewardNear: view.rewardNear, summary: view.summary, body: view.body, invites: [], messages: [],
     timeline: view.timeline, contentHash: view.contentHash, publishedAt: view.publishedAt, evidenceHash: view.evidenceHash,
     escrow: view.outcome === "fixed_and_paid" && view.rewardNear
@@ -159,6 +162,7 @@ const post = async (id: string, path: string, body: unknown = {}) => {
 };
 
 export const createInvite = (id: string, channel: InviteRecipient["channel"], handle: string) => post(id, "invites", { channel, handle });
+export const revokeInvite = (id: string, inviteId: string) => post(id, `invites/${encodeURIComponent(inviteId)}/revoke`);
 export const proposeTerms = (id: string, amountNear: number, repo: string) => post(id, "terms", { amountNear, repo });
 export const acceptTerms = (id: string) => post(id, "terms/accept");
 export const fundEscrow = (id: string) => post(id, "fund");

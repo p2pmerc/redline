@@ -1,3 +1,5 @@
+import { ProfileAvatar } from "@/components/ui/profile-avatar";
+import { peopleOf } from "@/lib/report-people";
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { CalendarBlank, Coins, GitBranch, CaretRight } from "@phosphor-icons/react";
@@ -28,6 +30,7 @@ export function StageProgressBar({ stage }: { stage: Report["stage"] }) {
 
 export function ReportCard({ report, index = 0, to }: { report: Report; index?: number; to?: string }) {
   const left = daysUntil(report.disclosureDeadline);
+  const people = peopleOf(report);
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -54,6 +57,10 @@ export function ReportCard({ report, index = 0, to }: { report: Report; index?: 
           </span>
         </div>
         <div className="mt-5 flex items-center gap-3">
+          <div className="flex -space-x-2" aria-label="People on this report">
+            <ProfileAvatar size="sm" name={people.researcher.name} seed={people.researcher.seed} className="ring-2 ring-surface-3" />
+            {people.team && <ProfileAvatar size="sm" name={people.team.name} seed={people.team.seed} className="ring-2 ring-surface-3" />}
+          </div>
           <div className="flex-1"><StageProgressBar stage={report.stage} /></div>
           <CaretRight size={14} className="text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </div>

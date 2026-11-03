@@ -31,6 +31,7 @@ export interface TimelineEvent {
     | "sealed"
     | "invite_sent"
     | "invite_redeemed"
+    | "invite_revoked"
     | "message"
     | "agreement_signed"
     | "escrow_funded"
@@ -79,7 +80,7 @@ export interface InviteRecipient {
   id: string;
   channel: "email" | "x" | "telegram" | "github";
   handle: string;
-  status: "pending" | "redeemed" | "expired";
+  status: "pending" | "redeemed" | "expired" | "revoked";
   /** Only the researcher receives it. Part of the invite link. */
   token?: string;
 }
@@ -93,6 +94,9 @@ export interface Report {
   stage: ReportStage;
   role: ReportRole;
   counterparty: string;
+  /** Stable RoboHash seeds (hash of the account id). Absent for people who have not joined. */
+  researcherSeed?: string;
+  teamSeed?: string;
   createdAt: string;
   updatedAt: string;
   /** Date after which the researcher may publish without a reply. */

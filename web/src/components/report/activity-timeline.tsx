@@ -1,5 +1,5 @@
 import {
-  LockKey, PaperPlaneTilt, UserCheck, ChatCircleText, Signature, Coins, GitPullRequest, GitMerge,
+  LockKey, PaperPlaneTilt, UserCheck, UserMinus, ChatCircleText, Signature, Coins, GitPullRequest, GitMerge,
   HandCoins, ArrowUUpLeft, BellRinging, Megaphone, ArrowSquareOut, type Icon,
 } from "@phosphor-icons/react";
 import { explorerTxUrl } from "@/lib/redline-config";
@@ -10,6 +10,7 @@ const kindIcon: Record<TimelineEvent["kind"], Icon> = {
   sealed: LockKey,
   invite_sent: PaperPlaneTilt,
   invite_redeemed: UserCheck,
+  invite_revoked: UserMinus,
   message: ChatCircleText,
   agreement_signed: Signature,
   escrow_funded: Coins,

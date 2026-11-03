@@ -5,19 +5,22 @@ import { InputMessage } from "@/components/ui/input-message";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { useToast } from "@/components/feedback/toast-provider";
 import { relativeTime, shortHash } from "@/lib/format";
-import { sha256Hex } from "@/lib/report-encryption";
-import type { NegotiationMessage, ReportRole } from "@/lib/redline-types";
+import { ProfileAvatar } from "@/components/ui/profile-avatar";
+import { peopleOf } from "@/lib/report-people";
+import { sendMessage } from "@/lib/data-source";
+import type { Report } from "@/lib/redline-types";
 
 interface SealedChatProps {
-  messages: NegotiationMessage[];
-  role: ReportRole;
-  counterparty: string;
-  locked?: boolean;
+  report: Report;
+  onChange: (next: Report) => void;
 }
 
-/** Private negotiation thread. Each message is hashed and the hash logged on chain. */
-export function SealedChat({ messages: initial, role, counterparty, locked }: SealedChatProps) {
-  const [messages, setMessages] = useState(initial);
+/** Private negotiation thread. Messages are encrypted with the report key before they leave the browser. */
+export function SealedChat({ report, onChange }: SealedChatProps) {
+  const messages = report.messages;
+  const counterparty = report.counterparty;
+  const people = peopleOf(report);
+  const locked = report.invites.every((i) => i.status !== "redeemed") || !!report.bodyLocked;
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const toast = useToast();
@@ -29,12 +32,10 @@ export function SealedChat({ messages: initial, role, counterparty, locked }: Se
     if (!text.trim() || sending) return;
     setSending(true);
     try {
-      const hash = await sha256Hex(new TextEncoder().encode(text));
-      await new Promise((r) => setTimeout(r, 700)); // pending: hash being logged on chain
-      setMessages((all) => [...all, { id: crypto.randomUUID(), from: role, author: "you", body: text, at: new Date().toISOString(), hash }]);
+      onChange(await sendMessage(report.id, text.trim()));
       setDraft("");
-    } catch {
-      toast.show({ tone: "error", title: "Message not sent", description: "Could not log the message hash. Try again." });
+    } catch (e) {
+      toast.show({ tone: "error", title: "Message not sent", description: e instanceof Error ? e.message : "Try again." });
     } finally {
       setSending(false);
     }
@@ -45,7 +46,7 @@ export function SealedChat({ messages: initial, role, counterparty, locked }: Se
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
         <LockKey size={16} className="text-muted-foreground" />
         <p className="text-subtitle font-medium">Sealed chat with {counterparty}</p>
-        <span className="ml-auto inline-flex items-center gap-1 text-caption text-muted-foreground"><Hash size={12} /> hash-logged</span>
+        <span className="ml-auto inline-flex items-center gap-1 text-caption text-muted-foreground"><Hash size={12} /> encrypted</span>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {messages.length === 0 ? (
@@ -53,7 +54,11 @@ export function SealedChat({ messages: initial, role, counterparty, locked }: Se
         ) : (
           messages.map((m) => (
             <div key={m.id}>
-              {m.author !== "you" && <p className="mb-1 text-caption text-muted-foreground">{m.author}</p>}
+              {m.author !== "you" && (
+                <p className="mb-1 flex items-center gap-1.5 text-caption text-muted-foreground">
+                  <ProfileAvatar size="sm" name={m.author} seed={m.from === "team" ? people.team?.seed : people.researcher.seed} /> {m.author}
+                </p>
+              )}
               <ChatMessage
                 from={m.author === "you" ? "user" : "assistant"}
                 time={relativeTime(m.at)}
@@ -71,7 +76,7 @@ export function SealedChat({ messages: initial, role, counterparty, locked }: Se
           value={draft}
           onValueChange={setDraft}
           onSend={(text) => void send(text)}
-          placeholder={locked ? "Chat opens after the invite is redeemed" : "Write a message. Only its hash goes on chain."}
+          placeholder={report.bodyLocked ? "Add the report key to chat" : locked ? "Chat opens after the invite is redeemed" : "Write a message. It is encrypted first."}
           disabled={locked || sending}
           status={sending ? "streaming" : "idle"}
           minRows={1}
