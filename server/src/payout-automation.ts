@@ -42,7 +42,7 @@ export function createPayoutAutomation(options: AutomationOptions) {
       if (!current || !watched(current)) return;
       const draft = structuredClone(current);
       if (draft.status === "funded") {
-        const seen = await ctx.mergeLookup(draft.escrow!.repo!, draft.escrow!.pullRequest!, ctx.githubLoginOf(draft.researcherId));
+        const seen = await ctx.mergeLookup(draft.escrow!.repo!, draft.escrow!.pullRequest!, draft.githubLogin ?? ctx.githubLoginOf(draft.researcherId));
         if (seen.status !== "merged") { schedule(id, seen.status === "unknown"); return; }
         say(`${id}: merge seen on GitHub, asking the enclave`);
         await runMergeCheck(ctx, draft);

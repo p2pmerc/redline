@@ -45,6 +45,7 @@ fn registered() -> EscrowContract {
     ctx(researcher(), 0, START);
     c.set_team_account(REPORT.into(), team());
     c.set_payout_account(REPORT.into(), wallet());
+    c.set_researcher_github(REPORT.into(), "p2pmerc".into());
     c
 }
 
@@ -708,4 +709,53 @@ fn an_edit_needs_a_real_hash() {
     let mut c = registered();
     ctx(researcher(), 0, START + 1);
     c.update_content_hash(REPORT.into(), "nope".into());
+}
+
+
+// ------------------------------------------------------------------ author bound for the enclave
+
+#[test]
+fn github_login_is_normalised_and_stored() {
+    let mut c = registered();
+    ctx(researcher(), 0, START);
+    c.set_researcher_github(REPORT.into(), "@P2PMerc".into());
+    assert_eq!(c.get_researcher_github(REPORT.into()), Some("p2pmerc".into()));
+}
+
+#[test]
+#[should_panic(expected = "not a valid GitHub login")]
+fn invalid_github_login_is_rejected() {
+    let mut c = registered();
+    ctx(researcher(), 0, START);
+    c.set_researcher_github(REPORT.into(), "bad login!".into());
+}
+
+#[test]
+#[should_panic(expected = "only the researcher")]
+fn only_the_researcher_binds_the_github_login() {
+    let mut c = registered();
+    ctx(team(), 0, START);
+    c.set_researcher_github(REPORT.into(), "someone".into());
+}
+
+#[test]
+#[should_panic(expected = "bind the researcher's GitHub account before funding")]
+fn funding_is_blocked_until_a_github_account_is_bound() {
+    let mut c = new_contract();
+    ctx(researcher(), fee(), START);
+    c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, Some(wallet()));
+    ctx(researcher(), 0, START);
+    c.set_team_account(REPORT.into(), team());
+    ctx(team(), 0, START);
+    c.propose_terms(REPORT.into(), U128(AMOUNT), "acme/widgets".into(), TERMS.into());
+    ctx(researcher(), 0, START);
+    c.accept_terms(REPORT.into(), TERMS.into());
+    ctx(team(), AMOUNT, START);
+    c.fund_escrow(REPORT.into());
+}
+
+#[test]
+fn the_enclave_request_carries_the_expected_author() {
+    let input = crate::outlayer_interface::merge_check_input(REPORT, "acme/widgets", 42, CheckPhase::Confirm, Some("p2pmerc"));
+    assert!(input.contains("\"expected_author\":\"p2pmerc\""));
 }

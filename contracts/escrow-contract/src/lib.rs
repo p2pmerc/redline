@@ -41,13 +41,17 @@ pub struct EscrowContract {
     /// Where the reward is paid, bound by the researcher before funding. Reports registered before this map
     /// existed have no entry and fall back to the researcher account.
     payouts: LookupMap<String, AccountId>,
+    /// The GitHub login the researcher bound to the report. The enclave must see this exact account as the
+    /// pull request author before it answers `merged`. Required before funding.
+    researcher_github: LookupMap<String, String>,
 }
 
-/// Root state before `payouts` existed. Only used by `migrate`.
+/// Root state before `researcher_github` existed. Only used by `migrate`.
 #[near(serializers = [borsh])]
-struct StateBeforePayouts {
+struct StateBeforeGithub {
     config: ContractConfig,
     reports: LookupMap<String, ReportRecord>,
+    payouts: LookupMap<String, AccountId>,
 }
 
 /// Outcome of one enclave check after it was validated against the stored pull request.
@@ -82,15 +86,16 @@ impl EscrowContract {
             },
             reports: LookupMap::new(b"r"),
             payouts: LookupMap::new(b"p"),
+            researcher_github: LookupMap::new(b"g"),
         }
     }
 
-    /// One-time upgrade from the state that had no payout map. Existing report records are untouched.
+    /// One-time upgrade from the state that had no GitHub binding map. Existing records are untouched.
     #[private]
     #[init(ignore_state)]
     pub fn migrate() -> Self {
-        let old: StateBeforePayouts = env::state_read().unwrap_or_else(|| env::panic_str("no old state"));
-        Self { config: old.config, reports: old.reports, payouts: LookupMap::new(b"p") }
+        let old: StateBeforeGithub = env::state_read().unwrap_or_else(|| env::panic_str("no old state"));
+        Self { config: old.config, reports: old.reports, payouts: old.payouts, researcher_github: LookupMap::new(b"g") }
     }
 
     // ---------------------------------------------------------------- registration and chat
@@ -197,6 +202,24 @@ impl EscrowContract {
         emit("payout_account_set", json!({ "report_id": report_id, "payout_account": payout_account }));
     }
 
+    /// The researcher binds the GitHub account that must author the fixing pull request. The enclave checks
+    /// `merged && author == this login` itself. Allowed until the escrow is funded.
+    pub fn set_researcher_github(&mut self, report_id: String, github_login: String) {
+        let record = self.record(&report_id);
+        self.require_researcher(&record);
+        require!(
+            matches!(
+                record.status,
+                ReportStatus::Registered | ReportStatus::TermsProposed | ReportStatus::TermsAccepted
+            ),
+            "the GitHub account can only change before funding"
+        );
+        let login = github_login.trim().trim_start_matches('@').to_ascii_lowercase();
+        require!(valid_github_login(&login), "not a valid GitHub login");
+        self.researcher_github.insert(report_id.clone(), login.clone());
+        emit("researcher_github_set", json!({ "report_id": report_id, "github_login": login }));
+    }
+
     /// The researcher invites one person to read the report and the chat. The person is named by the
     /// hash of a Privy-linked identity, and the enclave checks it against their verified sign-in.
     pub fn invite_member(&mut self, report_id: String, id_hash: String) {
@@ -292,6 +315,7 @@ impl EscrowContract {
         self.require_team(&record);
         require!(record.status == ReportStatus::TermsAccepted, "terms must be accepted before funding");
         require!(self.payouts.contains_key(&report_id), "set a payout account before funding");
+        require!(self.researcher_github.contains_key(&report_id), "bind the researcher's GitHub account before funding");
         let terms = record.terms.as_ref().expect("terms present");
         require!(env::attached_deposit().as_yoctonear() == terms.amount.0, "attach exactly the agreed amount");
         let now = env::block_timestamp();
@@ -508,6 +532,11 @@ impl EscrowContract {
         self.payouts.get(&report_id).cloned().or_else(|| self.reports.get(&report_id).map(|r| r.researcher.clone()))
     }
 
+    /// The GitHub login the enclave must see as the pull request author.
+    pub fn get_researcher_github(&self, report_id: String) -> Option<String> {
+        self.researcher_github.get(&report_id).cloned()
+    }
+
     pub fn get_config(&self) -> ContractConfig {
         self.config.clone()
     }
@@ -559,7 +588,7 @@ impl EscrowContract {
             .request_execution(
                 outlayer_interface::execution_source(&self.config),
                 outlayer_interface::resource_limits(),
-                outlayer_interface::merge_check_input(report_id, &terms.repo, pull_request, phase, None),
+                outlayer_interface::merge_check_input(report_id, &terms.repo, pull_request, phase, self.researcher_github.get(report_id).map(|s| s.as_str())),
                 Some(outlayer_interface::secrets_ref(&self.config)),
                 "Text".to_string(),
                 Some(env::predecessor_account_id()),
@@ -621,6 +650,14 @@ fn valid_report_id(id: &str) -> bool {
 
 fn valid_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+fn valid_github_login(login: &str) -> bool {
+    !login.is_empty()
+        && login.len() <= 39
+        && !login.starts_with('-')
+        && !login.ends_with('-')
+        && login.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
 fn valid_repo(repo: &str) -> bool {

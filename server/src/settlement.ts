@@ -56,13 +56,14 @@ export const stamp = (r: StoredReport, txHash: string) => {
 /** First sighting of the merge. Mutates `r`; the caller decides whether to save it. */
 export async function runMergeCheck(ctx: SettlementContext, r: StoredReport): Promise<void> {
   if (r.status !== "funded" || !r.escrow?.pullRequest || !r.escrow.repo) throw new LedgerError("link a pull request first");
-  const author = ctx.githubLoginOf(r.researcherId);
+  const author = r.githubLogin ?? ctx.githubLoginOf(r.researcherId);
   if (!ctx.live) {
     ledger.applyConfirmAnswer(r, await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, author), ctx.now());
     return;
   }
-  // The enclave does not know the researcher's GitHub login yet, so the author is checked here first.
-  // The enclave (and its 0.05 NEAR fee) is only used when this read already shows a merge by that author.
+  // Cheap pre-read so the enclave fee is only spent when GitHub already shows a merge by the bound author.
+  // The contract hands the bound GitHub login to the enclave, which checks merged && author itself; the
+  // answer the contract records is the enclave's, not this read.
   const seen = await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, author);
   if (seen.status !== "merged") {
     ledger.applyConfirmAnswer(r, seen, ctx.now());
@@ -80,10 +81,10 @@ export async function runMergeCheck(ctx: SettlementContext, r: StoredReport): Pr
 export async function runClaim(ctx: SettlementContext, r: StoredReport): Promise<void> {
   if (r.status !== "merge_confirmed" || !r.escrow?.pullRequest || !r.escrow.repo) throw new LedgerError("the merge has not been confirmed yet");
   if (!ctx.live) {
-    ledger.applyPayoutAnswer(r, "researcher", await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, ctx.githubLoginOf(r.researcherId)), ctx.now());
+    ledger.applyPayoutAnswer(r, "researcher", await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, r.githubLogin ?? ctx.githubLoginOf(r.researcherId)), ctx.now());
     return;
   }
-  const seen = await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, ctx.githubLoginOf(r.researcherId));
+  const seen = await ctx.mergeLookup(r.escrow.repo, r.escrow.pullRequest, r.githubLogin ?? ctx.githubLoginOf(r.researcherId));
   if (seen.status !== "merged") throw new LedgerError("GitHub does not show this pull request merged by the researcher's linked GitHub account right now, so no payout was started.", 409);
   const done = await needRelay(ctx).call("researcher", "claim_payout", { report_id: r.id }, NEAR_CHECK_DEPOSIT, 300);
   const status = verdictOf(done.logs, "Payout");

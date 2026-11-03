@@ -567,6 +567,21 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     log(r, { kind: "payout_account", title: "Payout account set", detail: `${account}${live ? "" : " (preview ledger)"}`, txHash });
   };
 
+  /** Binds the researcher's GitHub login on chain. The enclave then requires merged && author == this login. */
+  const bindGithub = async (r: StoredReport) => {
+    if (r.githubLogin) return;
+    const login = githubLoginOf(r.researcherId);
+    if (!login) {
+      if (!live) return;
+      throw new LedgerError("Add your GitHub link to your profile first. The merged pull request must be authored by that account.");
+    }
+    if (!["registered", "terms_proposed", "terms_accepted"].includes(r.status)) throw new LedgerError("the GitHub account is locked once the escrow is funded");
+    let txHash: string | undefined;
+    if (live) txHash = (await needRelay().call("researcher", "set_researcher_github", { report_id: r.id, github_login: login })).txHash;
+    r.githubLogin = login.toLowerCase();
+    log(r, { kind: "payout_account", title: "Pull request author bound", detail: `@${r.githubLogin}${live ? "" : " (preview ledger)"}`, txHash });
+  };
+
   ledgerAction("payout-account", async (r, role) => {
     if (role !== "researcher") throw new LedgerError("only the researcher sets the payout account", 403);
     await bindPayout(r);
@@ -574,10 +589,12 @@ export function createApiRouter(deps: ApiDeps): express.Router {
 
   ledgerAction("terms/accept", async (r, role) => {
     if (role === "researcher" && profiles.get(r.researcherId)?.payoutAccount) await bindPayout(r);
+    if (role === "researcher" && githubLoginOf(r.researcherId)) await bindGithub(r);
     ledger.acceptTerms(r, role, clock());
     if (live) stamp(r, (await needRelay().call("researcher", "accept_terms", { report_id: r.id, terms_hash: termsHash(r) })).txHash);
   });
   ledgerAction("fund", async (r, role) => {
+    if (role === "team" && r.status === "terms_accepted") await bindGithub(r);
     ledger.fundEscrow(r, role, clock());
     if (live) stamp(r, (await needRelay().call("team", "fund_escrow", { report_id: r.id }, BigInt(yocto(r.terms!.amountNear)))).txHash);
   });
@@ -599,7 +616,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     if (!ledger.canRefund(r, clock())) throw new LedgerError("the escrow has not expired, or there is nothing to refund");
     const e = r.escrow!;
     if (!live) {
-      const answer: ledger.MergeAnswer = e.pullRequest && e.repo ? await mergeLookup(e.repo, e.pullRequest, githubLoginOf(r.researcherId)) : { status: "not_merged" };
+      const answer: ledger.MergeAnswer = e.pullRequest && e.repo ? await mergeLookup(e.repo, e.pullRequest, r.githubLogin ?? githubLoginOf(r.researcherId)) : { status: "not_merged" };
       ledger.applyRefundAnswer(r, role, answer, clock());
       return;
     }

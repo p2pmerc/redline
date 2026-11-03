@@ -92,6 +92,8 @@ export interface StoredReport {
   status: LedgerStatus;
   /** NEAR account bound on chain to receive the reward. Required before the team can fund. */
   payoutAccount?: string;
+  /** GitHub login bound on chain; the enclave requires the merged pull request to be authored by it. */
+  githubLogin?: string;
   terms?: TermsRecord;
   escrow?: EscrowRecord;
   invites: InviteRecord[];
