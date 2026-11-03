@@ -1,8 +1,8 @@
 import { api, ApiError } from "./api-client";
 import { redlineConfig } from "./redline-config";
 import type { EscrowState, InviteRecipient, NegotiationMessage, ProposedTerms, Report, ReportRole, ResearcherProfile, ResearcherStats, ReportStage, Severity, TimelineEvent } from "./redline-types";
-import { getReportKey, saveReportKey, takeInviteKey } from "./report-key-vault";
-import { encryptWithKey, isValidKeyHex, openReportBody, sealReportBody } from "./report-encryption";
+import { getReportKey, saveReportKey } from "./report-key-vault";
+import { encryptWithKey, openReportBody, sealKeyToEnclave, sealReportBody } from "./report-encryption";
 
 /** Shape the server sends for a report the caller is a party to. Bodies and messages are ciphertext. */
 interface PartyView {
@@ -23,6 +23,7 @@ interface PartyView {
   payoutAccount?: string;
   summary: string;
   contentHash: string;
+  hasSealedKey?: boolean;
   ciphertextHex?: string;
   terms?: ProposedTerms;
   escrow?: EscrowState & { funded: boolean };
@@ -82,7 +83,7 @@ async function toReport(view: PartyView): Promise<Report> {
     id: view.id, title: view.title, target: view.target, repo: view.repo, severity: view.severity, stage: view.stage, role: view.role,
     counterparty: view.counterparty, researcherSeed: view.researcherSeed, teamSeed: view.teamSeed, createdAt: view.createdAt, updatedAt: view.updatedAt, disclosureDeadline: view.disclosureDeadline,
     rewardNear: view.rewardNear, payoutAccount: view.payoutAccount, summary: view.summary, body, bodyLocked, escrow: view.escrow, terms: view.terms, invites: view.invites,
-    messages, timeline: view.timeline, contentHash: view.contentHash, publishedAt: view.published?.at, evidenceHash: view.published?.evidenceHash,
+    messages, timeline: view.timeline, contentHash: view.contentHash, hasSealedKey: view.hasSealedKey, publishedAt: view.published?.at, evidenceHash: view.published?.evidenceHash,
   };
 }
 
@@ -145,8 +146,8 @@ export interface NewReportInput {
 }
 
 /**
- * Seals the report in the browser and registers it. The key is also escrowed in the key vault at
- * creation, so the signed-in owner and the verified invitee can open the report on any device.
+ * Seals the report in the browser and registers it. The key is sealed to the enclave public key at
+ * creation. Only the enclave can hand it back, to the signed-in owner and the verified invitee.
  */
 export async function createReport(input: NewReportInput, sealed?: Awaited<ReturnType<typeof sealReportBody>>): Promise<Report> {
   guard();
@@ -156,7 +157,6 @@ export async function createReport(input: NewReportInput, sealed?: Awaited<Retur
       title: input.title.trim(), target: input.repo.split("/")[0] ?? "", repo: input.repo.trim() || undefined, severity: input.severity,
       summary: input.summary, disclosureDays: input.disclosureDays, ciphertextHex: s.ciphertextHex, contentHash: s.contentHash,
       sealedKeyHex: input.sealedKeyHex,
-      reportKeyHex: s.keyHex,
     },
   });
   saveReportKey(view.id, s.keyHex);
@@ -168,45 +168,39 @@ const post = async (id: string, path: string, body: unknown = {}) => {
   return toReport(await api<PartyView>(`/reports/${encodeURIComponent(id)}/${path}`, { body }));
 };
 
-export const createInvite = (id: string, channel: InviteRecipient["channel"], handle: string, reportKeyHex?: string | null) =>
-  post(id, "invites", { channel, handle, ...(reportKeyHex ? { reportKeyHex } : {}) });
+export const createInvite = (id: string, channel: InviteRecipient["channel"], handle: string) =>
+  post(id, "invites", { channel, handle });
 
-/** The vaulted report key, released only to the signed-in owner and the verified invitee. */
-export async function fetchEscrowedKey(reportId: string): Promise<string | null> {
+/** The private invite link. It carries no key: the enclave releases the report key after sign-in. */
+export const inviteLink = (token: string): string => `${location.origin}/app/invite/${token}`;
+
+/** Relays a request sealed to the enclave. Returns the report key sealed to the browser's one-time key. */
+export async function fetchEnclaveSealedKey(reportId: string, blob: string): Promise<string> {
   guard();
-  try {
-    const r = await api<{ reportKeyHex: string }>(`/reports/${encodeURIComponent(reportId)}/key`);
-    return isValidKeyHex(r.reportKeyHex) ? r.reportKeyHex : null;
-  } catch (e) {
-    if (e instanceof ApiError && (e.status === 404 || e.status === 403)) return null;
-    throw e;
-  }
+  return (await api<{ sealedKey: string }>(`/reports/${encodeURIComponent(reportId)}/enclave-key`, { body: { blob } })).sealedKey;
 }
 
-/** Owner only: vault a key this browser already holds (covers reports sealed before escrow existed). */
-export async function escrowReportKey(reportId: string, reportKeyHex: string): Promise<void> {
+/** Owner only: store the report key sealed to the enclave (older reports, or after an edit). */
+export async function storeSealedKey(reportId: string, sealedKeyHex: string): Promise<void> {
   guard();
-  await api(`/reports/${encodeURIComponent(reportId)}/key`, { body: { reportKeyHex } });
+  await api(`/reports/${encodeURIComponent(reportId)}/sealed-key`, { body: { sealedKeyHex } });
 }
 
-export async function registerDeviceKey(reportId: string, devicePubHex: string): Promise<void> {
-  guard();
-  await api(`/reports/${encodeURIComponent(reportId)}/device-key`, { body: { devicePubHex } });
-}
+export interface ReportEdit { title: string; summary: string; severity: Severity; body: string }
 
-export async function listPartyDeviceKeys(reportId: string): Promise<{ keys: { userId: string; devicePubHex: string; at: string; hasWrap?: boolean }[] }> {
+/**
+ * Owner only. Re-encrypts the edited body with the SAME report key, re-seals the key envelope to the
+ * enclave for the new content hash, and sends the new ciphertext. The server registers the new hash on chain.
+ */
+export async function editReport(id: string, edit: ReportEdit): Promise<Report> {
   guard();
-  return api(`/reports/${encodeURIComponent(reportId)}/device-keys`);
-}
-
-export async function depositKeyWraps(reportId: string, wraps: { userId: string; devicePubHex: string; wrapHex: string }[]): Promise<void> {
-  guard();
-  await api(`/reports/${encodeURIComponent(reportId)}/key-wraps`, { body: { wraps } });
-}
-
-export async function fetchMyKeyWraps(reportId: string): Promise<{ wraps: { devicePubHex: string; wrapHex: string; at: string }[] }> {
-  guard();
-  return api(`/reports/${encodeURIComponent(reportId)}/key-wraps/me`);
+  const key = getReportKey(id);
+  if (!key) throw new ApiError("Unlock the report before editing it.", 400);
+  const { ciphertextHex, hash } = await encryptWithKey(edit.body, key);
+  const sealedKeyHex = redlineConfig.enclavePublicKey ? sealKeyToEnclave(key, hash, redlineConfig.enclavePublicKey) : undefined;
+  return toReport(await api<PartyView>(`/reports/${encodeURIComponent(id)}/edit`, {
+    body: { title: edit.title.trim(), summary: edit.summary.trim(), severity: edit.severity, ciphertextHex, contentHash: hash, sealedKeyHex },
+  }));
 }
 export const revokeInvite = (id: string, inviteId: string) => post(id, `invites/${encodeURIComponent(inviteId)}/revoke`);
 export const proposeTerms = (id: string, amountNear: number, repo: string) => post(id, "terms", { amountNear, repo });
@@ -239,8 +233,6 @@ export const previewInvite = (token: string) => (guard(), api<InvitePreview>(`/i
 export async function redeemInvite(token: string): Promise<Report> {
   guard();
   const view = await api<PartyView>(`/invites/${encodeURIComponent(token)}/redeem`, { body: {} });
-  const key = takeInviteKey(token);
-  if (key) saveReportKey(view.id, key);
   return toReport(view);
 }
 

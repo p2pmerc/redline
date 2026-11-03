@@ -8,11 +8,7 @@ import { ToastProvider } from "@/components/feedback/toast-provider";
 import { ErrorBoundary } from "@/components/feedback/error-boundary";
 import type { Report } from "@/lib/redline-types";
 
-vi.mock("@/lib/data-source", async (orig) => ({
-  ...(await orig<typeof import("@/lib/data-source")>()),
-  fetchEscrowedKey: vi.fn(async () => null),
-  escrowReportKey: vi.fn(async () => {}),
-}));
+vi.mock("@/lib/enclave-key", () => ({ readKeyFromEnclave: vi.fn(async () => { throw new Error("offline"); }) }));
 
 import { ReportView } from "./report-detail-page";
 

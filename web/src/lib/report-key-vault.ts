@@ -1,12 +1,10 @@
 /**
- * Where report keys live in the browser while the enclave is not deployed. A key never goes to the
- * server. The researcher's browser keeps it, and invite links carry it in the URL fragment, which
- * browsers do not send over the network.
+ * A per-browser cache of report keys. The key itself is held by the OutLayer enclave: this browser
+ * asks the enclave for it (see enclave-key.ts) and keeps a copy here for the session's reads.
  */
 import { isValidKeyHex } from "./report-encryption";
 
 const prefix = "redline:report-key:";
-const pendingPrefix = "redline:invite-key:";
 
 const read = (key: string): string | null => {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -20,16 +18,3 @@ export const getReportKey = (reportId: string): string | null => {
   const value = read(prefix + reportId);
   return value && isValidKeyHex(value) ? value : null;
 };
-
-export const rememberInviteKey = (token: string, keyHex: string) => { if (isValidKeyHex(keyHex)) write(pendingPrefix + token, keyHex.trim().toLowerCase()); };
-export const takeInviteKey = (token: string): string | null => read(pendingPrefix + token);
-
-/** `/app/invite/<token>#k=<key>` pulled from a location, so the key survives a sign-in redirect. */
-export function captureInviteKey(pathname: string, hash: string): void {
-  const match = /^\/app\/invite\/([\w-]{16,64})$/.exec(pathname);
-  const key = /(?:^#|&)k=([0-9a-fA-F]{64})/.exec(hash)?.[1];
-  if (match && key) rememberInviteKey(match[1]!, key);
-}
-
-export const inviteLink = (token: string, keyHex: string | null): string =>
-  `${location.origin}/app/invite/${token}${keyHex ? `#k=${keyHex}` : ""}`;

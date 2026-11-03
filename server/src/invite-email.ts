@@ -1,10 +1,10 @@
 /**
  * Branded Redline invite emails via AgentMail.
- * The invite URL may carry #k=<reportKey>; that fragment must never be logged or stored in delivery metadata.
+ * The invite URL is private and must never be logged or stored in delivery metadata. It carries no report key.
  */
 export interface InviteEmailInput {
   to: string;
-  inviteUrl: string; // may include #k=… — never log this string
+  inviteUrl: string; // private link — never log this string
   researcherName: string;
   researcherHandle?: string;
   repo?: string;
@@ -118,7 +118,7 @@ export function buildInviteEmail(input: InviteEmailInput): { subject: string; te
               </a>
             </td></tr>
             <tr><td style="padding:16px 0 0;font-family:Inter,system-ui,sans-serif;font-size:12px;line-height:1.5;color:#a8a29e">
-              This invite link is private. Do not forward it. The report key, if present, sits after the <code style="font-size:11px">#</code> in the URL and is never sent to our servers.
+              This invite link is private. Do not forward it. It carries no key: after you sign in and accept, the report key is released to you by a secure enclave.
             </td></tr>
           </table>
         </td></tr>
@@ -130,7 +130,7 @@ export function buildInviteEmail(input: InviteEmailInput): { subject: string; te
   return { subject, text, html };
 }
 
-/** Sends via AgentMail REST. Never log inviteUrl (may contain #k=). */
+/** Sends via AgentMail REST. Never log inviteUrl (private). */
 export async function sendInviteEmail(
   mail: AgentMailConfig,
   input: InviteEmailInput,
@@ -153,7 +153,7 @@ export async function sendInviteEmail(
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     // Strip any accidental invite URL from error text before surfacing.
-    const safe = body.replace(/https?:\/\/\S+#k=[0-9a-fA-F]{64}/g, "[invite-url]").slice(0, 300);
+    const safe = body.replace(/https?:\/\/\S+\/app\/invite\/\S+/g, "[invite-url]").slice(0, 300);
     throw new Error(`AgentMail send failed (${res.status})${safe ? `: ${safe}` : ""}`);
   }
   const json = (await res.json().catch(() => ({}))) as { message_id?: string; messageId?: string; id?: string };

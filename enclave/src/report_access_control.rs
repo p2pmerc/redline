@@ -36,10 +36,22 @@ pub fn invite_hash(kind: &str, handle: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// On-chain marker that a Privy user owns the report. The server's relay writes it with `invite_member`
+/// when the report is created, so the owner is named on chain by a hash, never by a handle.
+pub fn owner_hash(privy_user_id: &str) -> String {
+    invite_hash("owner", privy_user_id)
+}
+
 pub fn authorize(report: &ReportView, caller: &ProvenCaller) -> Result<Access, String> {
     let is_researcher = caller.identities.iter().any(|i| i.kind == "near" && i.handle == report.researcher.to_lowercase());
     if is_researcher {
         return Ok(Access::Researcher);
+    }
+    for identity in caller.identities.iter().filter(|i| i.kind == "privy") {
+        let hash = owner_hash(&identity.handle);
+        if let Some(entry) = report.members.iter().find(|m| m.id_hash.to_lowercase() == hash) {
+            return if entry.revoked { Err("your access to this report was withdrawn".into()) } else { Ok(Access::Researcher) };
+        }
     }
     let mut invited = false;
     for identity in &caller.identities {

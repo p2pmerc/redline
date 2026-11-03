@@ -55,9 +55,9 @@ export function SealedChat({ report, onChange }: SealedChatProps) {
           <EmptyState icon={ChatsCircle} title="No messages yet" description="Once the invited person redeems their invite, you can negotiate the reward here." />
         ) : (
           messages.map((m) => (
-            <div key={m.id}>
+            <div key={m.id} className="flex flex-col">
               {m.author !== "you" && (
-                <p className="mb-1 flex items-center gap-1.5 text-caption text-muted-foreground">
+                <p className="mb-1 flex items-center gap-1.5 self-start text-caption text-muted-foreground">
                   <ProfileAvatar size="sm" name={m.author} seed={m.from === "team" ? people.team?.seed : people.researcher.seed} /> {m.author}
                 </p>
               )}

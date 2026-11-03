@@ -148,6 +148,22 @@ impl EscrowContract {
         }
     }
 
+    /// The researcher edited the sealed report: record the hash of the new ciphertext. The history stays in
+    /// the event log. Not allowed once a payout is in flight or done, or after publication.
+    pub fn update_content_hash(&mut self, report_id: String, content_hash: String) {
+        require!(valid_sha256_hex(&content_hash), "content hash must be 64 hex characters");
+        let mut record = self.record(&report_id);
+        self.require_researcher(&record);
+        require!(record.published_at_ns.is_none(), "report is already published");
+        require!(
+            !matches!(record.status, ReportStatus::Paying | ReportStatus::Paid),
+            "the report is locked once it is paid"
+        );
+        let previous = std::mem::replace(&mut record.content_hash, content_hash.clone());
+        self.save(&report_id, record);
+        emit("report_edited", json!({ "report_id": report_id, "previous_hash": previous, "content_hash": content_hash }));
+    }
+
     /// The researcher names the NEAR account of the team that will fund the escrow.
     pub fn set_team_account(&mut self, report_id: String, team: AccountId) {
         let mut record = self.record(&report_id);

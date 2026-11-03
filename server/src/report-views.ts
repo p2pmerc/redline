@@ -62,6 +62,7 @@ export function partyView(report: StoredReport, role: Role, ledgerMode: string, 
     payoutAccount: report.payoutAccount,
     summary: report.summary,
     contentHash: report.contentHash,
+    hasSealedKey: !!report.sealedKeyHex,
     ciphertextHex: report.ciphertextHex,
     terms: report.terms,
     escrow: report.escrow

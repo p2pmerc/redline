@@ -54,6 +54,9 @@ enum Request {
     MergeCheck { repo: String, pull_request: u64, #[serde(default)] expected_author: Option<String> },
     RevealReport { report_id: String, sealed_key: String, eph_pub: String, #[serde(flatten)] auth: CallerAuth },
     ChatKey { report_id: String, eph_pub: String, #[serde(flatten)] auth: CallerAuth },
+    /// A reveal request sealed to the enclave key, so the sign-in token never travels in the clear
+    /// through the relay. `sealed_key` is the stored (public) ciphertext of the report key.
+    Sealed { blob: String, sealed_key: String },
     PublishKey { report_id: String, sealed_key: String },
     VerifyIdentity { id_token: String, kind: String, handle: String },
 }
@@ -115,6 +118,18 @@ fn handle(request: Request, services: &Services) -> Result<Value, String> {
             let sealed = chat_key_for_party(master(services)?, &report_id, &report, &caller, &eph_pub)?;
             Ok(ok(json!({ "sealed_chat_key": sealed })))
         }
+        Request::Sealed { blob, sealed_key } => {
+            let secret = crate::enclave_key::derive_ecies_secret(master(services)?)?;
+            let bytes = hex::decode(blob.trim().trim_start_matches("0x")).map_err(|_| "sealed request is not hex".to_string())?;
+            let plain = ecies::decrypt(&secret, &bytes).map_err(|_| "could not open the sealed request".to_string())?;
+            let mut inner: Value = serde_json::from_slice(&plain).map_err(|_| "sealed request is not json".to_string())?;
+            if inner["action"] != "reveal_report" {
+                return Err("only key reads can be sealed".into());
+            }
+            inner["sealed_key"] = Value::String(sealed_key);
+            let request: Request = serde_json::from_value(inner).map_err(|_| "the sealed request is not understood".to_string())?;
+            handle(request, services)
+        }
         Request::PublishKey { report_id, sealed_key } => {
             let report = load_report(services, &report_id)?;
             if report.published_at_ns.is_none() {
@@ -175,12 +190,12 @@ mod tests {
             "bob" | "t" => vec![("near", "bob.testnet"), ("email", "bob@example.com")],
             "ada" => vec![("email", "ada@acme.com"), ("github", "ada")],
             "eve" => vec![("email", "eve@evil.com"), ("near", "eve.testnet")],
+            "olga" | "ivan" | "mallory" => vec![],
             _ => return Err("sign-in token has the wrong shape".into()),
         };
-        Ok(SignedInUser {
-            user_id: token.into(),
-            identities: identities.into_iter().map(|(k, h)| LinkedIdentity { kind: k.into(), handle: h.into() }).collect(),
-        })
+        let mut identities: Vec<LinkedIdentity> = identities.into_iter().map(|(k, h)| LinkedIdentity { kind: k.into(), handle: h.into() }).collect();
+        identities.push(LinkedIdentity { kind: "privy".into(), handle: format!("did:privy:{token}") });
+        Ok(SignedInUser { user_id: token.into(), identities })
     }
     impl CallerIdentity for FakePrivy {
         fn prove(&self, auth: &CallerAuth) -> Result<ProvenCaller, String> {
@@ -363,6 +378,62 @@ mod tests {
         assert_eq!(ok["result"]["near_accounts"][0], "bob.testnet");
         let bad = run(&chain, json!({"action": "verify_identity", "id_token": "t", "kind": "twitter", "handle": "bob"}));
         assert_eq!(bad["success"], false);
+    }
+
+    fn with_members(members: Vec<MemberInvite>) -> FixedChain {
+        FixedChain(Some(ReportView {
+            researcher: "researcher.relay.testnet".into(),
+            content_hash: HASH.into(),
+            disclosure_deadline_ns: 1,
+            members,
+            published_at_ns: None,
+        }))
+    }
+
+    fn sealed_read(chain: &FixedChain, token: &str, eph: &str) -> Value {
+        let inner = json!({"action": "reveal_report", "report_id": "rl-1", "eph_pub": eph, "id_token": token});
+        let blob = seal_to_recipient(&enclave_public(), inner.to_string().as_bytes()).unwrap();
+        run(chain, json!({"action": "sealed", "blob": blob, "sealed_key": sealed_key(HASH)}))
+    }
+
+    #[test]
+    fn owner_and_redeemed_invitee_read_through_a_sealed_request_by_privy_id() {
+        use crate::report_access_control::owner_hash;
+        let chain = with_members(vec![
+            MemberInvite { id_hash: owner_hash("did:privy:olga"), revoked: false },
+            MemberInvite { id_hash: invite_hash("privy", "did:privy:ivan"), revoked: false },
+        ]);
+        for who in ["olga", "ivan"] {
+            let (secret, public) = browser();
+            let out = sealed_read(&chain, who, &public);
+            assert_eq!(out["success"], true, "{who}: {out}");
+            let plain = ecies::decrypt(&secret, &hex::decode(out["result"]["sealed_key"].as_str().unwrap()).unwrap()).unwrap();
+            assert_eq!(String::from_utf8(plain).unwrap(), "22".repeat(32));
+        }
+    }
+
+    #[test]
+    fn uninvited_and_revoked_privy_users_are_denied_through_a_sealed_request() {
+        use crate::report_access_control::owner_hash;
+        let (_, public) = browser();
+        let chain = with_members(vec![
+            MemberInvite { id_hash: owner_hash("did:privy:olga"), revoked: false },
+            MemberInvite { id_hash: invite_hash("privy", "did:privy:ivan"), revoked: true },
+        ]);
+        for who in ["mallory", "ivan"] {
+            let out = sealed_read(&chain, who, &public);
+            assert_eq!(out["success"], false, "{who}");
+            assert!(out["result"].is_null());
+        }
+    }
+
+    #[test]
+    fn a_sealed_request_cannot_carry_any_other_action_or_be_opened_by_another_key() {
+        let (_, public) = browser();
+        let chain = with_members(vec![]);
+        let other = seal_to_recipient(&enclave_public(), json!({"action": "chat_key", "report_id": "rl-1", "eph_pub": public, "id_token": "bob"}).to_string().as_bytes()).unwrap();
+        assert_eq!(run(&chain, json!({"action": "sealed", "blob": other, "sealed_key": sealed_key(HASH)}))["success"], false);
+        assert_eq!(run(&chain, json!({"action": "sealed", "blob": "00ff", "sealed_key": sealed_key(HASH)}))["success"], false);
     }
 
     #[test]

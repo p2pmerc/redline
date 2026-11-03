@@ -52,7 +52,7 @@ export function InviteRedeemPage() {
             <Badge color={severityTone[data.severity]} className="capitalize">{data.severity}</Badge>
             <h1 className="text-title font-semibold leading-snug tracking-tight">{data.title}</h1>
           </div>
-          <p className="flex items-start gap-2 text-body text-muted-foreground"><Lock size={16} className="mt-0.5 shrink-0" /> The text is encrypted. Your link carries the key, so it opens here after you join.</p>
+          <p className="flex items-start gap-2 text-body text-muted-foreground"><Lock size={16} className="mt-0.5 shrink-0" /> The text is encrypted. After you join, the enclave checks your sign-in and releases the key to you.</p>
           {data.taken ? (
             <p className="text-body text-muted-foreground">Another team account already joined this report.</p>
           ) : data.alreadyJoined ? (

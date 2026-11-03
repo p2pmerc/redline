@@ -11,7 +11,7 @@ export interface TimelineEntry {
   at: string;
   kind:
     | "sealed" | "invite_sent" | "invite_redeemed" | "invite_revoked" | "message" | "agreement_signed" | "escrow_funded"
-    | "pr_linked" | "pr_merged" | "payout" | "refund" | "disclosure_notice" | "published" | "terms_proposed" | "payout_account";
+    | "pr_linked" | "pr_merged" | "payout" | "refund" | "disclosure_notice" | "published" | "terms_proposed" | "payout_account" | "report_edited";
   title: string;
   detail?: string;
   txHash?: string;
@@ -69,20 +69,6 @@ export interface PublishedRecord {
   evidenceHash: string;
 }
 
-/** Ciphertext-only: report key sealed to a browser device public key. Server cannot open these. */
-export interface KeyWrapRecord {
-  userId: string;
-  devicePubHex: string;
-  wrapHex: string;
-  at: string;
-}
-
-export interface DeviceKeyRecord {
-  userId: string;
-  devicePubHex: string;
-  at: string;
-}
-
 export interface StoredReport {
   id: string;
   researcherId: string;
@@ -101,8 +87,8 @@ export interface StoredReport {
   ciphertextHex: string;
   /** Report key sealed to the enclave public key. Opaque to the server. */
   sealedKeyHex?: string;
-  /** Report key wrapped under the service key vault (see key-escrow.ts). Released only to parties. */
-  escrowedKeyHex?: string;
+  /** Identity hashes the relay has committed on chain for this report (owner and redeemed invitee). */
+  acl?: string[];
   status: LedgerStatus;
   /** NEAR account bound on chain to receive the reward. Required before the team can fund. */
   payoutAccount?: string;
@@ -112,8 +98,4 @@ export interface StoredReport {
   messages: MessageRecord[];
   timeline: TimelineEntry[];
   published?: PublishedRecord;
-  /** Registered device public keys (P-256 raw hex) for parties, so a browser that holds the report key can escrow wraps. */
-  deviceKeys?: DeviceKeyRecord[];
-  /** Report-key wraps. Ciphertext only. */
-  keyWraps?: KeyWrapRecord[];
 }

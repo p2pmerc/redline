@@ -21,14 +21,19 @@ let server: Server;
 let base: string;
 let clockMs: number;
 let answers: MergeAnswer[];
+let enclaveCalls: Record<string, unknown>[];
+let storeRef: ReportStore;
 
 beforeEach(async () => {
   clockMs = Date.parse("2026-11-02T10:00:00Z");
   answers = [];
+  enclaveCalls = [];
+  storeRef = new ReportStore(null);
   const app = createApp({
     config: { port: 0, dataFile: null, webDist: "/nonexistent", privyAppId: "app", ledgerMode: "preview", escrowContractId: "", enclavePublicKey: "" },
-    store: new ReportStore(null),
-    verifyToken: async (t) => { if (!t.startsWith("user-")) throw new Error("bad"); return t; },
+    store: storeRef,
+    enclave: { call: async (input) => { enclaveCalls.push(input); return { sealed_key: "sealed-answer" }; } },
+    verifyToken: async (t) => { if (!t.startsWith("user-") && !t.startsWith("did:privy:")) throw new Error("bad"); return t; },
     mergeLookup: async () => answers.shift() ?? { status: "unknown" },
     accountExists: async (id) => id !== "ghost.testnet",
     now: () => new Date(clockMs),
@@ -363,30 +368,104 @@ describe("payout account", () => {
   });
 });
 
-describe("report key escrow", () => {
-  it("escrows at creation and releases only to the owner and the redeemed invitee", async () => {
-    if (!(await call("user-alice", "GET", "/profile")).json.profile) await call("user-alice", "PUT", "/profile", PROFILE);
-    const sealed = seal("escrowed body");
-    const created = await call("user-alice", "POST", "/reports", {
-      title: "Escrow at creation", severity: "high", repo: "acme/widgets", disclosureDays: 30, summary: "s",
-      ciphertextHex: sealed.ciphertextHex, contentHash: sealed.contentHash, reportKeyHex: sealed.keyHex,
+describe("key custody by the enclave", () => {
+  const SEALED = "04" + "ab".repeat(80);
+
+  async function sealedReport() {
+    if (!(await call("did:privy:alice", "GET", "/profile")).json.profile) await call("did:privy:alice", "PUT", "/profile", PROFILE);
+    const sealed = seal("enclave body");
+    const created = await call("did:privy:alice", "POST", "/reports", {
+      title: "Held by the enclave", severity: "high", repo: "acme/widgets", disclosureDays: 30, summary: "s",
+      ciphertextHex: sealed.ciphertextHex, contentHash: sealed.contentHash, sealedKeyHex: SEALED,
     });
-    const id = created.json.id as string;
-    expect(JSON.stringify(created.json)).not.toContain(sealed.keyHex);
-    expect((await call("user-alice", "GET", `/reports/${id}/key`)).json.reportKeyHex).toBe(sealed.keyHex);
-    expect((await call("user-bob", "GET", `/reports/${id}/key`)).status).toBe(404); // not yet a party
-    await joinTeam(id);
-    expect((await call("user-bob", "GET", `/reports/${id}/key`)).json.reportKeyHex).toBe(sealed.keyHex);
-    expect((await call("user-eve", "GET", `/reports/${id}/key`)).status).toBe(404);
-    expect((await call("user-bob", "POST", `/reports/${id}/key`, { reportKeyHex: sealed.keyHex })).status).toBe(403);
+    return { sealed, id: created.json.id as string };
+  }
+  async function joinPrivyTeam(id: string) {
+    const invite = await call("did:privy:alice", "POST", `/reports/${id}/invites`, { channel: "email", handle: "sec@acme.dev" });
+    return call("did:privy:bob", "POST", `/invites/${invite.json.invites[0].token}/redeem`);
+  }
+
+  it("relays the sealed request to the enclave for the owner and the redeemed invitee only", async () => {
+    const { id } = await sealedReport();
+    const blob = "cd".repeat(100);
+    const ownerRead = await call("did:privy:alice", "POST", `/reports/${id}/enclave-key`, { blob });
+    expect(ownerRead.status).toBe(200);
+    expect(ownerRead.json.sealedKey).toBe("sealed-answer");
+    expect(enclaveCalls.at(-1)).toMatchObject({ action: "sealed", blob, sealed_key: SEALED });
+    expect((await call("did:privy:bob", "POST", `/reports/${id}/enclave-key`, { blob })).status).toBe(404); // not a party yet
+    await joinPrivyTeam(id);
+    clockMs += 20_000;
+    expect((await call("did:privy:bob", "POST", `/reports/${id}/enclave-key`, { blob })).status).toBe(200);
+    expect((await call("did:privy:eve", "POST", `/reports/${id}/enclave-key`, { blob })).status).toBe(404);
   });
 
-  it("backfills only a key that really opens the report", async () => {
-    const { created, sealed } = await newReport();
+  it("stops serving a revoked invitee at once and rate limits repeated reads", async () => {
+    const { id } = await sealedReport();
+    const joined = await joinPrivyTeam(id);
+    expect(joined.status).toBe(200);
+    const blob = "cd".repeat(100);
+    expect((await call("did:privy:bob", "POST", `/reports/${id}/enclave-key`, { blob })).status).toBe(200);
+    expect((await call("did:privy:bob", "POST", `/reports/${id}/enclave-key`, { blob })).status).toBe(429);
+    const inviteId = (await call("did:privy:alice", "GET", `/reports/${id}`)).json.invites[0].id;
+    expect((await call("did:privy:alice", "POST", `/reports/${id}/invites/${inviteId}/revoke`)).status).toBe(200);
+    clockMs += 20_000;
+    expect((await call("did:privy:bob", "POST", `/reports/${id}/enclave-key`, { blob })).status).toBe(404);
+  });
+
+  it("refuses wallet logins and reports with no sealed key", async () => {
+    const { created } = await newReport();
     const id = created.json.id as string;
-    expect((await call("user-alice", "GET", `/reports/${id}/key`)).status).toBe(404);
-    expect((await call("user-alice", "POST", `/reports/${id}/key`, { reportKeyHex: "ab".repeat(32) })).status).toBe(400);
-    expect((await call("user-alice", "POST", `/reports/${id}/key`, { reportKeyHex: sealed.keyHex })).status).toBe(200);
-    expect((await call("user-alice", "GET", `/reports/${id}/key`)).json.reportKeyHex).toBe(sealed.keyHex);
+    expect((await call("user-alice", "POST", `/reports/${id}/enclave-key`, { blob: "cd".repeat(100) })).status).toBe(409);
+  });
+
+  it("keeps no report key, wrap or device key in the stored report", async () => {
+    const { sealed, id } = await sealedReport();
+    await joinPrivyTeam(id);
+    const dump = JSON.stringify(storeRef.get(id));
+    expect(dump).not.toContain(sealed.keyHex);
+    for (const field of ["escrowedKeyHex", "keyWraps", "deviceKeys"]) expect(dump).not.toContain(field);
+    expect((await call("did:privy:alice", "GET", `/reports/${id}/key`)).status).toBe(404);
+    expect((await call("did:privy:alice", "POST", `/reports/${id}/key-wraps`, {})).status).toBe(404);
+  });
+
+  it("lets only the owner re-seal the key", async () => {
+    const { id } = await sealedReport();
+    await joinPrivyTeam(id);
+    expect((await call("did:privy:bob", "POST", `/reports/${id}/sealed-key`, { sealedKeyHex: SEALED })).status).toBe(403);
+    expect((await call("did:privy:alice", "POST", `/reports/${id}/sealed-key`, { sealedKeyHex: "04" + "ef".repeat(80) })).status).toBe(200);
+    expect(storeRef.get(id)?.sealedKeyHex).toBe("04" + "ef".repeat(80));
+  });
+});
+
+describe("editing a report", () => {
+  it("lets the owner replace the body, title and severity and logs 'Report edited'", async () => {
+    const { created } = await newReport();
+    const id = created.json.id as string;
+    const next = seal("## Better body\n```js\nconst a = 1;\n```");
+    const res = await call("user-alice", "POST", `/reports/${id}/edit`, {
+      title: "Sharper title", summary: "New summary", severity: "critical", ciphertextHex: next.ciphertextHex, contentHash: next.contentHash,
+    });
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ title: "Sharper title", severity: "critical", contentHash: next.contentHash });
+    expect(res.json.timeline.some((t: any) => t.title === "Report edited")).toBe(true);
+    expect((await call("user-alice", "GET", `/reports/${id}`)).json.ciphertextHex).toBe(next.ciphertextHex);
+  });
+
+  it("refuses a wrong hash, a non-owner, and an edit once the report is paid or disclosed", async () => {
+    const { created } = await newReport();
+    const id = created.json.id as string;
+    const next = seal("x".repeat(40));
+    expect((await call("user-alice", "POST", `/reports/${id}/edit`, { ciphertextHex: next.ciphertextHex, contentHash: "00".repeat(32) })).status).toBe(400);
+    await joinTeam(id);
+    expect((await call("user-bob", "POST", `/reports/${id}/edit`, { ciphertextHex: next.ciphertextHex, contentHash: next.contentHash })).status).toBe(403);
+    expect((await call("user-eve", "POST", `/reports/${id}/edit`, { ciphertextHex: next.ciphertextHex, contentHash: next.contentHash })).status).toBe(404);
+    const record = storeRef.get(id)!;
+    record.status = "paid";
+    storeRef.save(record);
+    expect((await call("user-alice", "POST", `/reports/${id}/edit`, { ciphertextHex: next.ciphertextHex, contentHash: next.contentHash })).status).toBe(409);
+    record.status = "registered";
+    record.published = { at: "2026-11-02T00:00:00Z", body: "x", evidenceHash: "y" };
+    storeRef.save(record);
+    expect((await call("user-alice", "POST", `/reports/${id}/edit`, { ciphertextHex: next.ciphertextHex, contentHash: next.contentHash })).status).toBe(409);
   });
 });

@@ -29,6 +29,7 @@ export interface TimelineEvent {
   at: string; // ISO timestamp
   kind:
     | "sealed"
+    | "report_edited"
     | "invite_sent"
     | "invite_redeemed"
     | "invite_revoked"
@@ -118,6 +119,8 @@ export interface Report {
   messages: NegotiationMessage[];
   timeline: TimelineEvent[];
   contentHash: string;
+  /** Whether the report key is already sealed to the enclave on the server. */
+  hasSealedKey?: boolean;
   terms?: ProposedTerms;
   /** The report key is not in this browser, so the body cannot be shown. */
   bodyLocked?: boolean;

@@ -119,7 +119,9 @@ impl SignedInUser {
     }
 }
 
-pub fn sign_in(fetcher: &dyn HttpFetcher, token: &str) -> Result<SignedInUser, String> {
+/// Checks only the token itself (signature, issuer, audience, expiry) and returns the Privy user id.
+/// No second request to Privy, so it does not depend on the app origin being allowed.
+pub fn verified_user_id(fetcher: &dyn HttpFetcher, token: &str) -> Result<String, String> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -129,8 +131,11 @@ pub fn sign_in(fetcher: &dyn HttpFetcher, token: &str) -> Result<SignedInUser, S
         return Err("could not load the sign-in keys".into());
     }
     let jwks: Value = serde_json::from_slice(&body).map_err(|_| "the sign-in keys are not json".to_string())?;
-    let claims = verify_token(token, &jwks, APP_ID, now)?;
+    Ok(verify_token(token, &jwks, APP_ID, now)?.user_id)
+}
 
+/// The linked accounts of a verified user, as Privy reports them.
+pub fn linked_accounts_of(fetcher: &dyn HttpFetcher, token: &str, user_id: &str) -> Result<Vec<LinkedIdentity>, String> {
     let bearer = format!("Bearer {token}");
     let (status, body) = fetcher.get(
         "https://auth.privy.io/api/v1/users/me",
@@ -141,10 +146,16 @@ pub fn sign_in(fetcher: &dyn HttpFetcher, token: &str) -> Result<SignedInUser, S
     }
     let me: Value = serde_json::from_slice(&body).map_err(|_| "the user record is not json".to_string())?;
     let user = if me["user"].is_object() { &me["user"] } else { &me };
-    if user["id"] != claims.user_id {
+    if user["id"] != user_id {
         return Err("the sign-in belongs to another user".into());
     }
-    Ok(SignedInUser { user_id: claims.user_id, identities: linked_identities(user) })
+    Ok(linked_identities(user))
+}
+
+pub fn sign_in(fetcher: &dyn HttpFetcher, token: &str) -> Result<SignedInUser, String> {
+    let user_id = verified_user_id(fetcher, token)?;
+    let identities = linked_accounts_of(fetcher, token, &user_id)?;
+    Ok(SignedInUser { user_id, identities })
 }
 
 #[cfg(test)]

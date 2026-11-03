@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { InputField, InputGroup } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { useToast } from "@/components/feedback/toast-provider";
-import { createInvite, revokeInvite } from "@/lib/data-source";
-import { getReportKey, inviteLink } from "@/lib/report-key-vault";
+import { createInvite, inviteLink, revokeInvite } from "@/lib/data-source";
 import type { InviteRecipient, Report } from "@/lib/redline-types";
 
 const channelMeta: Record<InviteRecipient["channel"], { label: string; icon: Icon; placeholder: string }> = {
@@ -68,8 +67,7 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
     if (!value) return;
     setSending(true);
     try {
-      const key = getReportKey(report.id);
-      const next = await toast.promise(createInvite(report.id, channel, value, key), {
+      const next = await toast.promise(createInvite(report.id, channel, value), {
         pending: channel === "email" ? "Sending invite email…" : "Creating invite…",
         success: channel === "email" ? "Invite email sent (or queued)" : "Invite ready — open Send as DM",
         error: "Could not create the invite",
@@ -78,7 +76,7 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
       setHandle("");
       const created = next.invites[next.invites.length - 1];
       if (created && (created.channel === "x" || created.channel === "telegram") && created.token) {
-        const url = inviteLink(created.token, key);
+        const url = inviteLink(created.token);
         const open = dmUrl(created, url);
         if (open) window.open(open, "_blank", "noopener,noreferrer");
       }
@@ -111,7 +109,7 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
   async function copy(invite: InviteRecipient) {
     if (!invite.token) return;
     try {
-      await navigator.clipboard.writeText(inviteLink(invite.token, getReportKey(report.id)));
+      await navigator.clipboard.writeText(inviteLink(invite.token));
       setCopied(invite.id);
       setTimeout(() => setCopied((c) => (c === invite.id ? null : c)), 1800);
     } catch {
@@ -121,7 +119,7 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
 
   function openDm(invite: InviteRecipient) {
     if (!invite.token) return;
-    const url = inviteLink(invite.token, getReportKey(report.id));
+    const url = inviteLink(invite.token);
     const open = dmUrl(invite, url);
     if (open) window.open(open, "_blank", "noopener,noreferrer");
   }
@@ -212,10 +210,10 @@ export function InvitePanel({ report, onChange }: { report: Report; onChange: (n
           </Button>
           <p className="text-caption text-muted-foreground">
             {channel === "email"
-              ? "We email them a branded invite. The report key rides in the # fragment of the link and is never logged."
+              ? "We email them a branded invite. The link carries no key: after they sign in and accept, the enclave releases the report key to them."
               : channel === "x" || channel === "telegram"
-                ? "We create the private invite link, then open a one-click DM composer with it. The #key fragment stays in your browser."
-                : "Share the link privately. It carries the report key after the # sign, which browsers never send to a server."}
+                ? "We create the private invite link, then open a one-click DM composer with it. The link carries no key: the enclave releases it after they sign in and accept."
+                : "Share the link privately. It carries no key: the enclave releases the report key to them after they sign in and accept."}
           </p>
         </form>
       )}

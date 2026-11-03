@@ -681,3 +681,31 @@ fn unmigrated_reports_fall_back_to_the_researcher_account() {
     c.register_report(REPORT.into(), HASH.into(), START + 60 * DAY_NS, None);
     assert_eq!(c.get_payout_account(REPORT.into()), Some(researcher()));
 }
+
+// ------------------------------------------------------------------ editing
+
+#[test]
+fn the_researcher_can_register_a_new_content_hash_and_it_is_logged() {
+    let mut c = registered();
+    ctx(researcher(), 0, START + 1);
+    let new_hash = "cd".repeat(32);
+    c.update_content_hash(REPORT.into(), new_hash.clone());
+    assert_eq!(c.get_report(REPORT.into()).unwrap().content_hash, new_hash);
+    assert!(get_logs().iter().any(|l| l.contains("report_edited")));
+}
+
+#[test]
+#[should_panic(expected = "only the researcher")]
+fn nobody_else_can_edit() {
+    let mut c = registered();
+    ctx(team(), 0, START + 1);
+    c.update_content_hash(REPORT.into(), "cd".repeat(32));
+}
+
+#[test]
+#[should_panic(expected = "64 hex")]
+fn an_edit_needs_a_real_hash() {
+    let mut c = registered();
+    ctx(researcher(), 0, START + 1);
+    c.update_content_hash(REPORT.into(), "nope".into());
+}

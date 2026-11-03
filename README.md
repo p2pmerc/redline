@@ -29,7 +29,7 @@ Status: testnet only. The web app and API run today in **preview mode**. The con
 Without a deployed contract and enclave (`LEDGER_MODE=preview`, empty `VITE_ENCLAVE_PUBLIC_KEY`):
 
 - The server plays the chain: it runs the same escrow state machine, and no funds move. Ledger references are marked `preview:`.
-- The report key is generated in the researcher's browser and escrowed at creation: the server wraps it (AES-256-GCM, `KEY_ESCROW_SECRET`) and releases it only to the signed-in owner and the verified, redeemed invitee, on any device (`GET /api/reports/:id/key`). This is service-held, not zero-knowledge; the enclave-sealed copy (`sealedKeyHex`) is the path to removing the service from the trust base. Invite links may still carry the key in the `#k=` fragment.
+- The report key is generated in the researcher's browser and sealed to the OutLayer TDX enclave's public key (`sealedKeyHex`). The server stores only ciphertext and that sealed blob; it holds no key that opens a report and has no key escrow. To read, the browser seals a request (one-time public key + Privy token) to the enclave and the server relays it. Inside the TEE the enclave verifies the token and checks the on-chain, hash-committed access list (owner and redeemed invitee, written by the relay via `invite_member` / `revoke_member`), then answers with the key sealed to the one-time key. Operators can't read your report. Owners can edit a report until it is paid or disclosed (`update_content_hash` on the contract; the history stays in the timeline).
 - GitHub merge status is read from the public API by the server.
 
 ## Run locally

@@ -1,67 +1,68 @@
 import { useEffect, useRef, useState } from "react";
-import { escrowReportKey, fetchEscrowedKey } from "@/lib/data-source";
+import { ApiError } from "@/lib/api-client";
+import { storeSealedKey } from "@/lib/data-source";
+import { readKeyFromEnclave } from "@/lib/enclave-key";
+import { redlineConfig } from "@/lib/redline-config";
+import { sealKeyToEnclave } from "@/lib/report-encryption";
 import { getReportKey, saveReportKey } from "@/lib/report-key-vault";
 
-const POLL_MS = 5000;
-const escrowed = new Set<string>();
+const RETRY_MS = 20_000;
+const resealed = new Set<string>();
 
 /**
  * Automatic key access, with no clicks and nothing to paste.
- *  - Locked (no working key in this browser): ask the key vault. It releases the key only to the
- *    signed-in owner and the verified, redeemed invitee, so any signed-in device unlocks itself.
- *  - Unlocked owner: make sure the vault holds the key too (covers reports sealed before the vault),
- *    once per session.
+ *  - Locked (no working key in this browser): ask the enclave. It checks your sign-in and the on-chain
+ *    access list, and releases the key only to the owner and a redeemed, non-revoked invitee.
+ *  - Owner of a report with no enclave-sealed key yet (older reports): seal it to the enclave, once.
  */
-export function useReportKeyAccess(reportId: string, locked: boolean, isOwner: boolean, onUnlocked: () => void): { checking: boolean } {
+export function useReportKeyAccess(
+  report: { id: string; contentHash: string; hasSealedKey?: boolean },
+  locked: boolean,
+  isOwner: boolean,
+  onUnlocked: () => void,
+): { checking: boolean; error?: string } {
   const [checking, setChecking] = useState(locked);
+  const [error, setError] = useState<string>();
   const lockedRef = useRef(locked);
   lockedRef.current = locked;
   const unlocked = useRef(onUnlocked);
   unlocked.current = onUnlocked;
+  const { id, contentHash, hasSealedKey } = report;
 
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
-    const tick = async (): Promise<boolean> => {
-      if (!lockedRef.current) {
-        const held = getReportKey(reportId);
-        if (isOwner && held && !escrowed.has(reportId)) {
-          await escrowReportKey(reportId, held);
-          escrowed.add(reportId);
-        }
-        return false;
-      }
-      const stored = getReportKey(reportId);
-      const vaulted = await fetchEscrowedKey(reportId);
-      // A stored key that does not open the report is wrong; only a different vaulted key helps.
-      if (vaulted && vaulted !== stored) {
-        saveReportKey(reportId, vaulted);
-        return true;
-      }
-      return false;
-    };
-
     const loop = async () => {
-      let justUnlocked = false;
+      if (!lockedRef.current) {
+        const held = getReportKey(id);
+        if (isOwner && held && !hasSealedKey && !resealed.has(id) && redlineConfig.enclavePublicKey) {
+          resealed.add(id);
+          try { await storeSealedKey(id, sealKeyToEnclave(held, contentHash, redlineConfig.enclavePublicKey)); } catch { resealed.delete(id); }
+        }
+        setChecking(false);
+        return;
+      }
       try {
-        justUnlocked = await tick();
-      } catch { /* offline or signed out: try again on the next round */ }
-      if (cancelled) return;
-      if (justUnlocked) {
+        const key = await readKeyFromEnclave(id);
+        if (cancelled) return;
+        saveReportKey(id, key);
+        setError(undefined);
         setChecking(false);
         unlocked.current();
         return;
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof ApiError || e instanceof Error ? e.message : "The enclave did not answer.");
       }
-      if (!lockedRef.current) { setChecking(false); if (!isOwner || escrowed.has(reportId)) return; }
-      timer = setTimeout(() => void loop(), POLL_MS);
+      if (!cancelled) timer = setTimeout(() => void loop(), RETRY_MS);
     };
     void loop();
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [reportId, isOwner]);
+  }, [id, isOwner, contentHash, hasSealedKey]);
 
-  return { checking };
+  return { checking, error };
 }

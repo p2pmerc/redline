@@ -42,7 +42,13 @@ impl CallerIdentity for LiveIdentity<'_> {
         }
         // Everything the caller is allowed to be comes from Privy's own record of their sign-in.
         let token = auth.id_token.as_deref().ok_or("sign in first")?;
-        Ok(ProvenCaller { identities: privy_identity_check::sign_in(self.http, token)?.identities })
+        let user_id = privy_identity_check::verified_user_id(self.http, token)?;
+        // The verified Privy user id is always proven. Linked accounts are added when Privy answers.
+        let mut identities = vec![LinkedIdentity { kind: "privy".into(), handle: user_id.to_lowercase() }];
+        if let Ok(linked) = privy_identity_check::linked_accounts_of(self.http, token, &user_id) {
+            identities.extend(linked);
+        }
+        Ok(ProvenCaller { identities })
     }
 
     fn signed_in_user(&self, id_token: &str) -> Result<SignedInUser, String> {

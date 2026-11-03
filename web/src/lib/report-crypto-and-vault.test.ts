@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { encryptWithKey, isValidKeyHex, openReportBody, sealReportBody, sha256Hex, fromHex } from "./report-encryption";
-import { captureInviteKey, getReportKey, inviteLink, saveReportKey, takeInviteKey } from "./report-key-vault";
+import { getReportKey, saveReportKey } from "./report-key-vault";
 import { robohashUrl } from "@/components/ui/profile-avatar";
 
 const store = new Map<string, string>();
@@ -43,15 +43,6 @@ describe("key vault", () => {
     expect(getReportKey("r1")).toBe(key);
     store.set("redline:report-key:r2", "nope");
     expect(getReportKey("r2")).toBeNull();
-  });
-
-  it("captures the key from an invite link fragment and builds the same link back", () => {
-    const token = "t".repeat(24);
-    captureInviteKey(`/app/invite/${token}`, `#k=${key}`);
-    expect(takeInviteKey(token)).toBe(key);
-    expect(inviteLink(token, key)).toBe(`https://redline.example/app/invite/${token}#k=${key}`);
-    captureInviteKey("/app/reports/x", `#k=${key}`);
-    expect(takeInviteKey("x")).toBeNull();
   });
 });
 

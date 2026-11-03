@@ -3,7 +3,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { Reveal, SectionHeading } from "./reveal";
 
 const guarantees = [
-  { icon: Key, title: "Sealed, on any device", body: "The report key is generated in your browser and held wrapped. It is released only to you and verified invitees, so signing in on any device is enough. Redline stores the report only as ciphertext." },
+  { icon: Key, title: "The key lives in the enclave", body: "The report key is generated in your browser and sealed to the enclave's public key. Only code inside the TDX enclave can open it, and it hands it back only to you and verified invitees, on any device. Redline operators can't read your report." },
   { icon: Cpu, title: "Identity checked inside a TEE", body: "A verified Privy session is matched to the invite inside an Intel TDX enclave with remote attestation, so the match cannot be faked by an operator." },
   { icon: Hash, title: "A tamper-evident record", body: "Report hash, invites, message hashes and agreements are logged on the NEAR contract. Nobody can rewrite the history after the fact." },
   { icon: ShieldWarning, title: "Fail-closed payouts", body: "If GitHub cannot be reached or the answer is unclear, the contract neither pays nor refunds early. It waits and checks again." },

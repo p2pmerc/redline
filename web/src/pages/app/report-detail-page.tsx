@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { ErrorBoundary } from "@/components/feedback/error-boundary";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, FileMd, FilePdf, Lock, Clock, ChatsCircle, ListChecks, FileText, Hash, Megaphone, ShieldCheck } from "@phosphor-icons/react";
+import { ArrowLeft, PencilSimpleLine, FileMd, FilePdf, Lock, Clock, ChatsCircle, ListChecks, FileText, Hash, Megaphone, ShieldCheck } from "@phosphor-icons/react";
 import Tabs, { TabsItem } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ReportEditor } from "@/components/report/report-editor";
+import { ReportEditForm } from "@/components/report/report-edit-form";
 import { StageStepper } from "@/components/report/stage-stepper";
 import { EscrowPanel } from "@/components/report/escrow-panel";
 import { InvitePanel } from "@/components/report/invite-panel";
@@ -50,10 +51,12 @@ function BackLink() {
 export function ReportView({ initial, reload }: { initial: Report; reload: () => void }) {
   const [report, setReport] = useState(initial);
   const [tab, setTab] = useState(0);
+  const [editing, setEditing] = useState(false);
   const [exporting, setExporting] = useState<null | "md" | "pdf">(null);
   const toast = useToast();
   const left = daysUntil(report.disclosureDeadline);
   const people = peopleOf(report);
+  const canEdit = report.role === "researcher" && !report.bodyLocked && report.stage !== "paid" && report.stage !== "fix_merged" && report.stage !== "published" && report.stage !== "refunded" ? true : false;
 
   async function doExport(kind: "md" | "pdf") {
     setExporting(kind);
@@ -114,15 +117,19 @@ export function ReportView({ initial, reload }: { initial: Report; reload: () =>
               <TabsItem index={1} label="Negotiation" icon={ChatsCircle} />
               <TabsItem index={2} label="Timeline" icon={ListChecks} />
             </Tabs>
-            {tab === 0 && (
+            {tab === 0 && !editing && (
               <div className="flex items-center gap-2">
+                {canEdit && <Button variant="secondary" size="compact" leadingIcon={PencilSimpleLine} onClick={() => setEditing(true)}>Edit report</Button>}
                 <Button variant="secondary" size="compact" leadingIcon={FileMd} disabled={!!report.bodyLocked} loading={exporting === "md"} onClick={() => doExport("md")}>Export .md</Button>
                 <Button variant="secondary" size="compact" leadingIcon={FilePdf} disabled={!!report.bodyLocked} loading={exporting === "pdf"} onClick={() => doExport("pdf")}>Export PDF</Button>
               </div>
             )}
           </div>
 
-          {tab === 0 && (
+          {tab === 0 && editing && canEdit && (
+            <ReportEditForm report={report} onCancel={() => setEditing(false)} onSaved={(next) => { setReport(next); setEditing(false); }} />
+          )}
+          {tab === 0 && !editing && (
             <div>
               {report.bodyLocked
                 ? <div className="flex items-center gap-2 rounded-2xl bg-surface-2 p-6 text-body text-muted-foreground"><Lock size={16} /> Encrypted. Unlocking automatically with your account.</div>

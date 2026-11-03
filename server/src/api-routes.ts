@@ -12,7 +12,7 @@ import * as ledger from "./escrow-ledger.js";
 import { LedgerError, type MergeAnswer } from "./escrow-ledger.js";
 import { isPublic, partyView, publicView, roleOf, summaryView, type PublicAuthor } from "./report-views.js";
 import { openCiphertext } from "./report-ciphertext.js";
-import { createKeyEscrow, type KeyEscrow } from "./key-escrow.js";
+import { EnclaveError, type EnclaveClient } from "./enclave-client.js";
 import { ChainError, type ChainRelay } from "./chain-relay.js";
 import { sendInviteEmail } from "./invite-email.js";
 import { exclusive, NEAR_CHECK_DEPOSIT, runClaim, runMergeCheck, settled, stamp, verdictOf, type SettlementContext } from "./settlement.js";
@@ -30,8 +30,8 @@ export interface ApiDeps {
   accountExists?: AccountChecker;
   /** NEAR wallet sign-in (HOT Wallet and other NEP-413 wallets). */
   walletAuth?: WalletAuth;
-  /** Key vault that wraps report keys for the owner and the verified invitee. */
-  keyEscrow?: KeyEscrow;
+  /** The OutLayer enclave that holds report keys. The server only relays sealed requests and answers. */
+  enclave?: EnclaveClient;
   now?: () => Date;
 }
 
@@ -72,22 +72,18 @@ const createReportBody = z.object({
   ciphertextHex: hex(2_000_000),
   contentHash: hash64,
   sealedKeyHex: hex(4000).optional(),
-  /** The report key, over TLS, to be wrapped in the key vault at creation. */
-  reportKeyHex: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
 });
 const inviteBody = z.object({
   channel: z.enum(["email", "x", "telegram", "github"]),
   handle: z.string().trim().min(2).max(120),
-  /** Browser-only report key. Used once to build the #k= invite URL for email; never stored or logged. */
-  reportKeyHex: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
 });
-const deviceKeyBody = z.object({ devicePubHex: z.string().regex(/^[0-9a-fA-F]{130}$/) });
-const keyWrapsBody = z.object({
-  wraps: z.array(z.object({
-    userId: z.string().min(3).max(128),
-    devicePubHex: z.string().regex(/^[0-9a-fA-F]{130}$/),
-    wrapHex: z.string().regex(/^[0-9a-fA-F]+$/i).min(100).max(4000),
-  })).min(1).max(20),
+const editBody = z.object({
+  title: z.string().trim().min(3).max(140).optional(),
+  summary: z.string().trim().max(400).optional(),
+  severity: z.enum(["critical", "high", "medium", "low"]).optional(),
+  ciphertextHex: hex(2_000_000),
+  contentHash: hash64,
+  sealedKeyHex: hex(4000).optional(),
 });
 const messageBody = z.object({ ciphertextHex: hex(40_000), hash: hash64 });
 const termsBody = z.object({
@@ -128,7 +124,6 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     return relay;
   };
   const profiles = deps.profiles ?? new ProfileStore(null);
-  const keyEscrow = deps.keyEscrow ?? createKeyEscrow(randomUUID() + randomUUID());
   const githubLoginOf = (userId: string): string | undefined => githubLoginFromLink(profiles.get(userId)?.links.github);
   const settlement: SettlementContext = { live, relay, mergeLookup, now: () => (deps.now ?? (() => new Date()))(), githubLoginOf };
   const authorOf = (userId: string): PublicAuthor | undefined => {
@@ -281,7 +276,6 @@ export function createApiRouter(deps: ApiDeps): express.Router {
       contentHash: input.contentHash.toLowerCase(),
       ciphertextHex: input.ciphertextHex.toLowerCase(),
       sealedKeyHex: input.sealedKeyHex?.toLowerCase(),
-      ...(input.reportKeyHex && openCiphertext(input.ciphertextHex, input.reportKeyHex) !== undefined ? { escrowedKeyHex: keyEscrow.wrap(input.reportKeyHex.toLowerCase()) } : {}),
       status: "registered",
       invites: [],
       messages: [],
@@ -301,6 +295,8 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     }
     log(report, { kind: "sealed", title: "Report sealed", detail: `Hash ${report.contentHash.slice(0, 12)}…`, txHash: sealTx });
     store.insert(report);
+    // Commit the owner on the chain-held access list so the enclave can authorize key reads. Retried on read.
+    await syncAcl(report).catch(() => undefined);
     res.status(201).json(view(report, "researcher"));
   }));
 
@@ -320,9 +316,8 @@ export function createApiRouter(deps: ApiDeps): express.Router {
       createdAt: clock().toISOString(),
       delivery: { state: "idle" },
     };
-    // Build the private invite URL in memory only. Never log it (may contain #k=).
-    const keyFrag = input.reportKeyHex ? `#k=${input.reportKeyHex.toLowerCase()}` : "";
-    const inviteUrl = `${config.appOrigin}/app/invite/${token}${keyFrag}`;
+    // The link carries no key. The invitee gets it from the enclave after signing in and redeeming.
+    const inviteUrl = `${config.appOrigin}/app/invite/${token}`;
 
     if (input.channel === "email") {
       if (!config.agentMailApiKey || !config.agentMailInboxId) {
@@ -368,84 +363,107 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     res.status(201).json(view(report, role));
   }));
 
-  /** Escrow the report key for the owner (no-op when already held). The key must really open the report. */
-  router.post("/reports/:id/key", (req, res) => {
-    const { report, role } = party(req);
-    if (role !== "researcher") throw new HttpError(403, "Only the researcher can escrow the report key.");
-    const { reportKeyHex } = z.object({ reportKeyHex: z.string().regex(/^[0-9a-fA-F]{64}$/) }).parse(req.body);
-    if (openCiphertext(report.ciphertextHex, reportKeyHex) === undefined) throw new HttpError(400, "That key does not open this report.");
-    if (!report.escrowedKeyHex || keyEscrow.unwrap(report.escrowedKeyHex) === undefined) {
-      report.escrowedKeyHex = keyEscrow.wrap(reportKeyHex.toLowerCase());
-      store.save(report);
+  // ------------------------------------------------------------------ key custody (enclave)
+  // The report key lives only as `sealedKeyHex`, sealed to the OutLayer enclave. To read it, the browser
+  // seals {report_id, one-time public key, Privy token} to the enclave key and this server relays that
+  // blob. The enclave verifies the token inside the TEE, checks the on-chain ACL (hashes of the owner and
+  // the redeemed invitee) and answers with the key sealed to the browser's one-time key. The server sees
+  // only ciphertext, and holds no key that opens a report.
+  const identityHash = (kind: string, handle: string) =>
+    createHash("sha256").update(`redline:invite:v1:${kind.trim().toLowerCase()}:${handle.trim().replace(/^@/, "").toLowerCase()}`).digest("hex");
+  const privyOnly = (userId?: string) => (userId && userId.startsWith("did:privy:") ? userId : undefined);
+  const aclLocks = new Map<string, Promise<unknown>>();
+
+  /** Makes the on-chain member list match who is a party now. Idempotent, safe to call often. */
+  const syncAcl = (report: StoredReport): Promise<void> => {
+    if (!live) return Promise.resolve();
+    const run = async () => {
+      const chain = needRelay();
+      const owner = privyOnly(report.researcherId);
+      const member = privyOnly(report.teamId);
+      const want = new Set<string>([owner && identityHash("owner", owner), member && identityHash("privy", member)].filter(Boolean) as string[]);
+      const have = new Set(report.acl ?? []);
+      for (const h of want) {
+        if (have.has(h)) continue;
+        await chain.call("researcher", "invite_member", { report_id: report.id, id_hash: h });
+        have.add(h);
+        report.acl = [...have];
+        store.save(report);
+      }
+      for (const h of [...have]) {
+        if (want.has(h)) continue;
+        await chain.call("researcher", "revoke_member", { report_id: report.id, id_hash: h });
+        have.delete(h);
+        report.acl = [...have];
+        store.save(report);
+      }
+    };
+    const previous = aclLocks.get(report.id) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(run);
+    aclLocks.set(report.id, next);
+    return next;
+  };
+  const readLimit = new Map<string, number>();
+
+  router.post("/reports/:id/enclave-key", handler(async (req, res) => {
+    const { report } = party(req);
+    if (!deps.enclave) throw new HttpError(501, "The enclave is not connected on this server.");
+    if (!report.sealedKeyHex) throw new HttpError(409, "This report has no enclave-sealed key yet. Its owner re-seals it when they open it.");
+    const user = caller(req).userId;
+    if (!privyOnly(user)) throw new HttpError(403, "Key reads from the enclave need a Privy sign-in.");
+    const { blob } = z.object({ blob: hex(20_000) }).parse(req.body);
+    const gate = `${report.id}:${user}`;
+    const last = readLimit.get(gate) ?? 0;
+    if (clock().getTime() - last < 8_000) throw new HttpError(429, "Slow down. The enclave is still working on your last request.");
+    readLimit.set(gate, clock().getTime());
+    await syncAcl(report);
+    let result: Record<string, unknown>;
+    try {
+      result = await deps.enclave.call({ action: "sealed", blob, sealed_key: report.sealedKeyHex });
+    } catch (e) {
+      if (e instanceof EnclaveError) throw new HttpError(e.status === 403 ? 403 : 502, e.message);
+      throw e;
     }
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ sealedKey: result.sealed_key });
+  }));
+
+  /** The owner re-seals the key to the enclave when the report has none (older reports) or after an edit. */
+  router.post("/reports/:id/sealed-key", (req, res) => {
+    const { report, role } = party(req);
+    if (role !== "researcher") throw new HttpError(403, "Only the researcher can seal the key.");
+    const { sealedKeyHex } = z.object({ sealedKeyHex: hex(4000) }).parse(req.body);
+    report.sealedKeyHex = sealedKeyHex.toLowerCase();
+    store.save(report);
     res.json({ ok: true });
   });
 
-  /** Release the report key to the signed-in owner or the verified, redeemed invitee, on any device. */
-  router.get("/reports/:id/key", (req, res) => {
-    const { report } = party(req);
-    const keyHex = report.escrowedKeyHex ? keyEscrow.unwrap(report.escrowedKeyHex) : undefined;
-    if (!keyHex) throw new HttpError(404, "The key is not escrowed yet.");
-    res.setHeader("Cache-Control", "no-store");
-    res.json({ reportKeyHex: keyHex });
-  });
-
-  /** Register this browser's device public key so a party who holds the report key can escrow a wrap for you. */
-  router.post("/reports/:id/device-key", (req, res) => {
+  /** The owner edits the report. The browser re-encrypts with the same key; the server stores the new
+   *  ciphertext and registers the new hash on chain. Locked once paid or disclosed. */
+  router.post("/reports/:id/edit", handler(async (req, res) => {
     const { report, role } = party(req);
-    const user = (req as unknown as AuthedRequest).caller;
-    const { devicePubHex } = deviceKeyBody.parse(req.body);
-    const pub = devicePubHex.toLowerCase();
-    report.deviceKeys = report.deviceKeys ?? [];
-    report.deviceKeys = report.deviceKeys.filter((d) => !(d.userId === user.userId && d.devicePubHex === pub));
-    report.deviceKeys.push({ userId: user.userId, devicePubHex: pub, at: clock().toISOString() });
-    // Keep the list small.
-    if (report.deviceKeys.length > 40) report.deviceKeys = report.deviceKeys.slice(-40);
-    report.updatedAt = clock().toISOString();
+    if (role !== "researcher") throw new HttpError(403, "Only the researcher can edit this report.");
+    if (report.published) throw new HttpError(409, "The report is disclosed, so it can no longer be edited.");
+    if (report.status === "paid" || report.status === "merge_confirmed") throw new HttpError(409, "The report is locked once it is paid or being paid.");
+    const input = editBody.parse(req.body);
+    if (sha256(input.ciphertextHex) !== input.contentHash.toLowerCase()) throw new HttpError(400, "The content hash does not match the ciphertext.");
+    if (input.ciphertextHex.length < 2 * (12 + 16 + 1)) throw new HttpError(400, "That does not look like a sealed report.");
+    let txHash: string | undefined;
+    if (live) txHash = (await needRelay().call("researcher", "update_content_hash", { report_id: report.id, content_hash: input.contentHash.toLowerCase() })).txHash;
+    if (input.title !== undefined) report.title = input.title;
+    if (input.summary !== undefined) report.summary = input.summary;
+    if (input.severity !== undefined) report.severity = input.severity;
+    report.contentHash = input.contentHash.toLowerCase();
+    report.ciphertextHex = input.ciphertextHex.toLowerCase();
+    if (input.sealedKeyHex) report.sealedKeyHex = input.sealedKeyHex.toLowerCase();
+    log(report, { kind: "report_edited", title: "Report edited", detail: `New hash ${report.contentHash.slice(0, 12)}…`, ...(txHash ? { txHash } : {}) });
     store.save(report);
-    res.json({ ok: true, devicePubHex: pub, role });
-  });
-
-  /** List device pubs for parties on this report (researcher + redeemed team), so a browser holding the key can wrap it. */
-  router.get("/reports/:id/device-keys", (req, res) => {
-    const { report } = party(req);
-    const partyIds = new Set([report.researcherId, ...(report.teamId ? [report.teamId] : [])]);
-    const wrapped = new Set((report.keyWraps ?? []).map((w) => `${w.userId}:${w.devicePubHex}`));
-    const keys = (report.deviceKeys ?? []).filter((d) => partyIds.has(d.userId)).map((d) => ({ ...d, hasWrap: wrapped.has(`${d.userId}:${d.devicePubHex}`) }));
-    res.json({ keys });
-  });
-
-  /** Deposit ciphertext-only wraps. Caller must already hold the report key in their browser (enforced client-side). */
-  router.post("/reports/:id/key-wraps", (req, res) => {
-    const { report, role } = party(req);
-    if (role !== "researcher" && role !== "team") throw new HttpError(403, "Only parties to the report can deposit wraps.");
-    const input = keyWrapsBody.parse(req.body);
-    const partyIds = new Set([report.researcherId, ...(report.teamId ? [report.teamId] : [])]);
-    report.keyWraps = report.keyWraps ?? [];
-    for (const w of input.wraps) {
-      if (!partyIds.has(w.userId)) throw new HttpError(400, "Wraps are only for the researcher or the redeemed security contact.");
-      const pub = w.devicePubHex.toLowerCase();
-      const wrapHex = w.wrapHex.toLowerCase();
-      report.keyWraps = report.keyWraps.filter((x) => !(x.userId === w.userId && x.devicePubHex === pub));
-      report.keyWraps.push({ userId: w.userId, devicePubHex: pub, wrapHex, at: clock().toISOString() });
-    }
-    if (report.keyWraps.length > 60) report.keyWraps = report.keyWraps.slice(-60);
-    report.updatedAt = clock().toISOString();
-    store.save(report);
-    res.json({ ok: true, count: input.wraps.length });
-  });
-
-  /** Fetch wraps for the signed-in user only. */
-  router.get("/reports/:id/key-wraps/me", (req, res) => {
-    const { report } = party(req);
-    const user = (req as unknown as AuthedRequest).caller;
-    const wraps = (report.keyWraps ?? []).filter((w) => w.userId === user.userId).map((w) => ({ devicePubHex: w.devicePubHex, wrapHex: w.wrapHex, at: w.at }));
-    res.json({ wraps });
-  });
+    res.json(view(report, role));
+  }));
 
   // Revoking closes the door at once: a redeemed member stops being a party, so every read of the
   // report and the chat answers 404 for them. Only allowed before the escrow holds money.
-  router.post("/reports/:id/invites/:inviteId/revoke", (req, res) => {
+  router.post("/reports/:id/invites/:inviteId/revoke", handler(async (req, res) => {
     const { report, role } = party(req);
     if (role !== "researcher") throw new HttpError(403, "Only the researcher can withdraw an invite.");
     const invite = report.invites.find((i) => i.id === req.params.inviteId);
@@ -463,8 +481,10 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     }
     log(report, { kind: "invite_revoked", title: "Invite withdrawn", detail: `${invite.channel}: ${invite.handle}` });
     store.save(report);
+    // Remove the member from the on-chain access list, so the enclave stops releasing the key to them.
+    if (wasMember) await syncAcl(report);
     res.json(view(report, role));
-  });
+  }));
 
   router.get("/invites/:token", (req, res) => {
     const found = store.findInvite(String(req.params.token));
@@ -480,7 +500,7 @@ export function createApiRouter(deps: ApiDeps): express.Router {
     });
   });
 
-  router.post("/invites/:token/redeem", (req, res) => {
+  router.post("/invites/:token/redeem", handler(async (req, res) => {
     const found = store.findInvite(String(req.params.token));
     if (!found) throw new HttpError(404, "This invite link is not valid.");
     const { report, inviteId } = found;
@@ -495,8 +515,9 @@ export function createApiRouter(deps: ApiDeps): express.Router {
       log(report, { kind: "invite_redeemed", title: "Invite redeemed", detail: `${invite.channel}: ${invite.handle}` });
       store.save(report);
     }
+    await syncAcl(report).catch(() => undefined);
     res.json(view(report, "team"));
-  });
+  }));
 
   router.post("/reports/:id/messages", (req, res) => {
     const { report, role } = party(req);

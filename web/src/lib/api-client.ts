@@ -39,3 +39,6 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   if (!res.ok) throw new ApiError(data?.error ?? `Request failed (${res.status}).`, res.status);
   return data as T;
 }
+
+/** The signed-in user's current session token, for requests that are sealed to the enclave. */
+export const getAuthToken = async (): Promise<string | null> => (await bridge?.getToken()) ?? null;

@@ -1,6 +1,6 @@
 import {
   LockKey, PaperPlaneTilt, UserCheck, UserMinus, ChatCircleText, Signature, Coins, GitPullRequest, GitMerge,
-  HandCoins, ArrowUUpLeft, BellRinging, Megaphone, ArrowSquareOut, Scroll, Wallet, type Icon,
+  HandCoins, ArrowUUpLeft, BellRinging, Megaphone, ArrowSquareOut, Scroll, Wallet, PencilSimpleLine, type Icon,
 } from "@phosphor-icons/react";
 import { explorerTxUrl } from "@/lib/redline-config";
 import { relativeTime, shortHash } from "@/lib/format";
@@ -9,6 +9,7 @@ import type { TimelineEvent } from "@/lib/redline-types";
 /** Every kind the server may emit. Unknown kinds fall back to Scroll so a new event never crashes the tab. */
 export const kindIcon: Record<TimelineEvent["kind"], Icon> = {
   sealed: LockKey,
+  report_edited: PencilSimpleLine,
   invite_sent: PaperPlaneTilt,
   invite_redeemed: UserCheck,
   invite_revoked: UserMinus,

@@ -1,6 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Route, Routes, useLocation } from "react-router-dom";
-import { captureInviteKey } from "@/lib/report-key-vault";
+import { Route, Routes } from "react-router-dom";
 import { LandingPage } from "@/pages/landing-page";
 import { AuthGate } from "@/components/app/auth-gate";
 import { ReportPageSkeleton } from "@/components/feedback/skeleton";
@@ -16,9 +15,6 @@ const SettingsPage = lazy(() => import("@/pages/app/settings-page").then((m) => 
 const ReportDetailPage = lazy(() => import("@/pages/app/report-detail-page").then((m) => ({ default: m.ReportDetailPage })));
 
 export function App() {
-  // Runs before the sign-in gate can redirect, so an invite key in the URL fragment is not lost.
-  const location = useLocation();
-  captureInviteKey(location.pathname, location.hash);
   return (
     <Suspense fallback={<ReportPageSkeleton />}>
     <Routes>
