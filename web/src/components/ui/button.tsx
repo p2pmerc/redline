@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { Slot } from "@radix-ui/react-slot";
+import { CaretRight } from "@phosphor-icons/react";
 import { cva, type VariantProps } from "class-variance-authority";
 import type { IconComponent } from "@/lib/icon-context";
 import { cn } from "@/lib/utils";
@@ -153,7 +154,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       render,
       loading = false,
       leadingIcon: LeadingIcon,
-      trailingIcon: TrailingIcon,
+      trailingIcon: TrailingIconProp,
       active = false,
       disabled,
       children,
@@ -164,6 +165,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     // nativeButton is accepted for Base UI parity and ignored (see its doc).
     const props = omit(rest, ["nativeButton"]);
+    const isPrimary = (variant ?? "primary") === "primary";
 
     // asChild: the user's element becomes the root, but the button's internal
     // structure (bg layer, content wrapper, spinner, icons) must survive. Slot
@@ -194,6 +196,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const isIconOnly = resolvedSize === "icon" || resolvedSize === "icon-compact";
     const isCompact =
       resolvedSize === "compact" || resolvedSize === "icon-compact";
+    // Primary buttons end in a chevron unless they bring their own trailing icon.
+    const TrailingIcon = TrailingIconProp ?? (isPrimary && !isIconOnly ? CaretRight : undefined);
     const iconSize = isCompact ? 14 : 16;
     // Spinner box tracks the button height so the loading glyph stays
     // proportionate across sizes.
@@ -286,6 +290,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             iconRight: !isIconOnly && !!TrailingIcon,
           }),
           shape.button,
+          isPrimary && "rounded-full",
           className
         )}
         // asChild roots (e.g. an anchor) don't take the disabled attribute —

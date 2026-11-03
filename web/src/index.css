@@ -713,3 +713,58 @@
   color: var(--muted-foreground);
 }
 .bar-track { background: var(--track); border-radius: 9999px; overflow: hidden; }
+
+/* Warm theme, part 2: eyebrows, search field, count badges, chart colors */
+:root {
+  --chip: #F3EBD3;
+  --accent-soft: rgb(242 92 5 / 0.1);
+  --page-glow: radial-gradient(60rem 28rem at 85% -10%, rgb(255 122 26 / 0.08), transparent 70%);
+}
+.dark {
+  --chip: #3A3427;
+  --accent-soft: rgb(255 122 26 / 0.16);
+  --page-glow: radial-gradient(60rem 28rem at 85% -10%, rgb(255 122 26 / 0.10), transparent 70%);
+}
+.eyebrow {
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--redline);
+}
+.search-field {
+  background: var(--surface-3);
+  box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgb(90 65 25 / 0.06);
+  border-radius: 12px;
+}
+.dark .search-field { box-shadow: 0 0 0 1px var(--border); }
+.kbd-chip {
+  background: var(--chip);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.count-badge {
+  background-image: var(--gloss-orange);
+  box-shadow: 0 2px 6px -2px rgb(242 92 5 / 0.55), 0 1px 0 0 rgb(255 255 255 / 0.35) inset;
+  color: #fff;
+  border-radius: 9999px;
+  min-width: 22px;
+  padding: 0 7px;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.nav-active .count-badge { background-image: none; background: rgb(255 255 255 / 0.25); box-shadow: none; }
+.page-glow { background-image: var(--page-glow); background-repeat: no-repeat; }
+.card-hairline { background: var(--surface-3); border: 1px solid var(--border); border-radius: 16px; }
+.chart-orange { color: var(--redline); }
+.bar-fill-green { background: linear-gradient(90deg, #22B24C, #3FCB61); }
+.bar-fill-amber { background: linear-gradient(90deg, #F2A20A, #F8BC3A); }
+.bar-fill-red { background: linear-gradient(90deg, #E5484D, #F06A6E); }
