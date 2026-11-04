@@ -17,7 +17,7 @@ import type { Severity } from "@/lib/redline-types";
 import { FileMd, FilePdf } from "@phosphor-icons/react";
 
 const severities: Severity[] = ["critical", "high", "medium", "low"];
-const deadlines = [30, 45, 60, 90];
+const deadlines = [7, 30, 45, 60, 90];
 
 const steps = [
   { id: "encrypt", label: "Encrypting the report in your browser", icon: LockKey },
