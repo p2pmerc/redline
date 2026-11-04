@@ -596,7 +596,7 @@
     transition-property: color;}}}
 @import "@fontsource-variable/inter/opsz.css";
 
-/* Redline theme: shadcn token layer on top of the Fluid Functionalism surfaces */
+/* Redline theme: shadcn token layer on top of the app surface tokens */
 @theme inline {
   --font-sans: "Inter Variable", "Inter", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;

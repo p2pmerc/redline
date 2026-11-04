@@ -279,7 +279,7 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       // aria-checked, tabIndex, roving highlight, typeahead, and Enter/Space/
       // click activation. handleActivate rides on the primitive as onActivate,
       // not on the div: that is the handler keyboard activation calls. The
-      // styled div carries the Fluid Functionalism visuals and the
+      // styled div carries the Redline menu visuals and the
       // fluid-hover registration; MenuItem itself imports no primitive.
       return renderMenuItem({
         radio: !isCheckbox && typeof checked === "boolean",

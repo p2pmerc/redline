@@ -34,7 +34,7 @@ function Link({ href, children, ...rest }: { href: string } & Omit<React.AnchorH
 // ---------------------------------------------------------------------------
 // Card is shadcn/ui's compositional card — the same parts and `data-slot`
 // contract (Card, CardHeader, CardTitle, CardDescription, CardAction,
-// CardContent, CardFooter) — with the Fluid Functionalism layer on top:
+// CardContent, CardFooter) — with Redline's surface layer on top:
 // design tokens, a weight-animated title, and a sibling CardGroup that owns
 // layout (stacked list, inline rows, or grid) plus the magnetic fluid hover
 // highlight that previews where a click will land.
@@ -832,9 +832,8 @@ function CardImage({ src, alt, className }: CardImageProps) {
 CardImage.displayName = "CardImage";
 
 // ── CardEyebrow ──────────────────────────────────────────
-// Small label above the title (e.g. "New Model"). Deprecated: Fluid
-// Functionalism doesn't use eyebrows, a card starts with its title. Kept so
-// existing code keeps compiling.
+// Small label above the title (e.g. "New Model"). Deprecated: Redline
+// cards start with the title, no eyebrow. Kept so existing code keeps compiling.
 
 /** @deprecated No eyebrows: a card starts with its title. */
 const CardEyebrow = forwardRef<HTMLSpanElement, HTMLAttributes<HTMLSpanElement>>(
