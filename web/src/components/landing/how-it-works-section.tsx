@@ -1,5 +1,6 @@
 import { LockKey, UserCheck, Handshake, GitMerge } from "@phosphor-icons/react";
-import { Reveal, SectionHeading } from "./reveal";
+import { Reveal } from "./reveal";
+import "./landing.css";
 
 const steps = [
   {
@@ -26,27 +27,37 @@ const steps = [
 
 export function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="scroll-mt-20 px-4 py-20 sm:px-6">
-      <SectionHeading
-        eyebrow="How it works"
-        title="Four steps from finding a bug to getting paid"
-        description="No middleman holds the report, the key or the money."
-      />
-      <div className="mx-auto mt-12 grid max-w-6xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {steps.map((step, i) => (
-          <Reveal key={step.title} delay={i * 0.06}>
-            <article className="group relative h-full card-hairline p-6 transition-shadow duration-200 hover:shadow-surface-4">
-              <div className="flex items-center justify-between">
-                <span className="flex size-10 items-center justify-center rounded-xl bg-foreground/[0.06] text-foreground transition-colors group-hover:bg-fluid-accent group-hover:text-white">
-                  <step.icon size={20} />
-                </span>
-                <span className="text-caption font-medium tabular-nums text-muted-foreground">0{i + 1}</span>
-              </div>
-              <h3 className="mt-5 text-title font-semibold">{step.title}</h3>
-              <p className="mt-2 text-body text-muted-foreground">{step.body}</p>
-            </article>
-          </Reveal>
-        ))}
+    <section id="how-it-works" className="scroll-mt-4 px-3 pb-3 pt-3 sm:px-4 sm:pt-4">
+      <div className="mx-auto rounded-[2rem] bg-surface-3 px-5 py-16 shadow-surface-2 sm:rounded-[2.75rem] sm:px-10 sm:py-24 lg:px-14">
+        <Reveal className="mx-auto max-w-5xl text-center">
+          <p className="eyebrow">How it works</p>
+          <h2 className="mt-4 text-balance text-[clamp(2.25rem,6.4vw,5rem)] font-semibold leading-[0.98] tracking-[-0.05em]">
+            Four steps from finding a bug to getting paid
+          </h2>
+          <p className="mx-auto mt-5 max-w-xl text-pretty text-title text-muted-foreground">
+            No middleman holds the report, the key or the money.
+          </p>
+        </Reveal>
+        <ol className="mx-auto mt-14 grid max-w-6xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {steps.map((step, i) => (
+            <li key={step.title}>
+              <Reveal delay={i * 0.07} className="h-full">
+                <article className="lp-num-card flex h-full flex-col rounded-3xl bg-background p-6 shadow-surface-1 hover:shadow-surface-5 sm:p-7">
+                  <div className="flex items-start justify-between">
+                    <span className="lp-num text-[3.5rem] font-semibold leading-none tracking-[-0.06em] text-foreground/90" aria-hidden>
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="flex size-10 items-center justify-center rounded-full bg-redline/12 text-redline">
+                      <step.icon size={20} />
+                    </span>
+                  </div>
+                  <h3 className="mt-10 text-[1.35rem] font-semibold leading-tight tracking-tight">{step.title}</h3>
+                  <p className="mt-2.5 text-body text-muted-foreground">{step.body}</p>
+                </article>
+              </Reveal>
+            </li>
+          ))}
+        </ol>
       </div>
     </section>
   );
