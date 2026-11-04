@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { isChunkLoadError, reloadForNewBuild } from "@/lib/chunk-reload";
 
 interface Props { children: ReactNode; onRetry?: () => void }
 interface State { error: Error | null }
@@ -12,6 +13,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    if (isChunkLoadError(error) && reloadForNewBuild()) return;
     console.error("Redline UI error", error, info.componentStack);
   }
 

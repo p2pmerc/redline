@@ -1,4 +1,5 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
+import { lazyWithReload } from "@/lib/chunk-reload";
 import { Route, Routes } from "react-router-dom";
 import { ScrollManager } from "@/components/layout/scroll-manager";
 import { LandingPage } from "@/pages/landing-page";
@@ -9,12 +10,12 @@ import { ProfileGate } from "@/lib/profile-context";
 import { DisclosureDetailPage, DisclosuresPage, NotFoundPage } from "@/pages/public-pages";
 import { LeaderboardPage, ResearcherPage } from "@/pages/leaderboard-pages";
 
-const DashboardPage = lazy(() => import("@/pages/app/dashboard-page").then((m) => ({ default: m.DashboardPage })));
-const NewReportPage = lazy(() => import("@/pages/app/new-report-page").then((m) => ({ default: m.NewReportPage })));
-const InviteRedeemPage = lazy(() => import("@/pages/app/invite-redeem-page").then((m) => ({ default: m.InviteRedeemPage })));
-const WelcomePage = lazy(() => import("@/pages/app/welcome-page").then((m) => ({ default: m.WelcomePage })));
-const SettingsPage = lazy(() => import("@/pages/app/settings-page").then((m) => ({ default: m.SettingsPage })));
-const ReportDetailPage = lazy(() => import("@/pages/app/report-detail-page").then((m) => ({ default: m.ReportDetailPage })));
+const DashboardPage = lazyWithReload(() => import("@/pages/app/dashboard-page").then((m) => ({ default: m.DashboardPage })));
+const NewReportPage = lazyWithReload(() => import("@/pages/app/new-report-page").then((m) => ({ default: m.NewReportPage })));
+const InviteRedeemPage = lazyWithReload(() => import("@/pages/app/invite-redeem-page").then((m) => ({ default: m.InviteRedeemPage })));
+const WelcomePage = lazyWithReload(() => import("@/pages/app/welcome-page").then((m) => ({ default: m.WelcomePage })));
+const SettingsPage = lazyWithReload(() => import("@/pages/app/settings-page").then((m) => ({ default: m.SettingsPage })));
+const ReportDetailPage = lazyWithReload(() => import("@/pages/app/report-detail-page").then((m) => ({ default: m.ReportDetailPage })));
 
 export function App() {
   return (

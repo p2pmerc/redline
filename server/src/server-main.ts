@@ -31,8 +31,14 @@ export function createApp(deps: ApiDeps): express.Express {
   app.use(createDiscoveryRouter(deps));
 
   if (existsSync(path.join(config.webDist, "index.html"))) {
-    app.use(express.static(config.webDist, { index: false, maxAge: "1h" }));
-    app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(config.webDist, "index.html")));
+    // Hashed build assets never change, so cache them forever; a miss is a real 404, never index.html.
+    app.use("/assets", express.static(path.join(config.webDist, "assets"), { index: false, immutable: true, maxAge: "1y", fallthrough: false }));
+    app.use(express.static(config.webDist, { index: false, maxAge: "1h", setHeaders: (res, file) => { if (file.endsWith(".html")) res.setHeader("Cache-Control", "no-cache"); } }));
+    // index.html must always revalidate so open tabs pick up the newest entry chunk after a deploy.
+    app.get(/^(?!\/api\/).*/, (_req, res) => {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.sendFile(path.join(config.webDist, "index.html"));
+    });
   }
   return app;
 }
