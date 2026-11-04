@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { motion } from "motion/react";
-import { ArrowLeft, ArrowSquareOut, CalendarBlank, Coins, Crown, GitBranch, GithubLogo, GitPullRequest, Globe, LockKey, Medal, Megaphone, Receipt, Trophy, UserCircle, Users, XLogo } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowSquareOut, CalendarBlank, Coins, Crown, GitBranch, GithubLogo, Globe, LockKey, Medal, Megaphone, Receipt, Trophy, UserCircle, Users, XLogo } from "@phosphor-icons/react";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -148,7 +148,7 @@ function DisclosureTile({ d, index }: { d: ResearcherDisclosure; index: number }
       </div>
       <div className="mt-4 flex flex-wrap gap-2 pt-1">
         <Button variant="secondary" size="compact" render={<Link to={`/disclosures/${d.id}`} />}>Open disclosure</Button>
-        {d.pullRequestUrl && <Button variant="secondary" size="compact" leadingIcon={GitPullRequest} trailingIcon={ArrowSquareOut} render={<a href={d.pullRequestUrl} target="_blank" rel="noreferrer" />}>Fix PR</Button>}
+        {d.pullRequestUrl && <Button variant="secondary" size="compact" leadingIcon={GithubLogo} trailingIcon={ArrowSquareOut} render={<a href={d.pullRequestUrl} target="_blank" rel="noreferrer" />}>Fix PR</Button>}
         {d.links.payoutTx && <Button variant="secondary" size="compact" leadingIcon={Receipt} trailingIcon={ArrowSquareOut} render={<a href={d.links.payoutTx} target="_blank" rel="noreferrer" title={d.payoutTxHash} />}>Payout {d.payoutTxHash ? shortHash(d.payoutTxHash, 4, 4) : ""}</Button>}
         {d.links.fundTx && <Button variant="ghost" size="compact" trailingIcon={ArrowSquareOut} render={<a href={d.links.fundTx} target="_blank" rel="noreferrer" title={d.fundTxHash} />}>Escrow tx</Button>}
       </div>

@@ -36,7 +36,7 @@ export function ActivityTimeline({ events }: { events: TimelineEvent[] }) {
   const ordered = [...events].sort((a, b) => b.at.localeCompare(a.at));
   return (
     <ol className="relative space-y-1">
-      <span aria-hidden className="absolute bottom-3 left-[17px] top-3 w-px bg-border" />
+      <span aria-hidden className="absolute bottom-3 left-[25px] -translate-x-1/2 top-3 w-px bg-border" />
       {ordered.map((e) => {
         const EventIcon = iconForKind(e.kind);
         return (

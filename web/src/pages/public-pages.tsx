@@ -1,6 +1,6 @@
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Megaphone, LockKey, FileMd, FilePdf, ShieldCheck, ArrowSquareOut, Compass, HouseLine, Trophy } from "@phosphor-icons/react";
+import { ArrowLeft, Megaphone, LockKey, FileMd, FilePdf, ShieldCheck, ArrowSquareOut, Compass, GithubLogo, HouseLine, Trophy } from "@phosphor-icons/react";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/landing/cta-section";
 import { Badge } from "@/components/ui/badge";
@@ -82,12 +82,12 @@ export function DisclosureDetailPage() {
                 {data.bodyPublished && <Button variant="secondary" size="compact" leadingIcon={FileMd} onClick={() => exportMarkdown(data.title, data.body)}>Export .md</Button>}
                 {data.bodyPublished && <Button variant="secondary" size="compact" leadingIcon={FilePdf} onClick={() => void exportPdf(data.title, data.body)}>Export PDF</Button>}
                 {data.escrow?.pullRequestUrl && (
-                  <Button variant="secondary" size="compact" trailingIcon={ArrowSquareOut} render={<a href={data.escrow.pullRequestUrl} target="_blank" rel="noreferrer" />}>Fix pull request</Button>
+                  <Button variant="secondary" size="compact" leadingIcon={GithubLogo} trailingIcon={ArrowSquareOut} render={<a href={data.escrow.pullRequestUrl} target="_blank" rel="noreferrer" />}>Fix pull request</Button>
                 )}
               </div>
             </div>
             {data.bodyPublished ? <ReportEditor value={data.body} editable={false} />
-              : <EmptyState icon={LockKey} title="The write-up is still sealed" description={data.summary || "The researcher has not unsealed this report. The fix was merged and the payout is on-chain below."} />}
+              : <EmptyState icon={LockKey} title="The write-up is still sealed" description={data.escrow?.pullRequestUrl ? "The full write-up is sealed. The fix is public — see the fix pull request above." : "The full write-up is sealed between the researcher and the team."} />}
             <section className="card-hairline p-3">
               <h2 className="px-2 py-2 text-subtitle font-semibold">On-chain evidence</h2>
               <ActivityTimeline events={data.timeline} />

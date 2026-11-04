@@ -2,7 +2,7 @@ import { AccountChip } from "@/components/ui/account-chip";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import {
-  Vault, GitPullRequest, ArrowsClockwise, HandCoins, ArrowUUpLeft, CheckCircle, Hourglass, WarningCircle, Coins, Timer, Signature, GitBranch, Flask,
+  Vault, GitPullRequest, ArrowsClockwise, HandCoins, ArrowUUpLeft, CheckCircle, Hourglass, WarningCircle, Coins, Timer, Signature, GitBranch, Flask, GithubLogo,
 } from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -154,7 +154,7 @@ export function EscrowPanel({ report, onChange }: { report: Report; onChange: (n
             )}
             {escrow?.pullRequestUrl && (
               <p className="break-all text-caption text-muted-foreground">
-                Fix: {escrow.pullRequestUrl}
+                <GithubLogo size={14} className="mr-1 inline-block align-[-2px]" aria-hidden />Fix: {escrow.pullRequestUrl}
                 {escrow.prConfirmed || confirmed ? (report.githubLogin ? ` · @${report.githubLogin}` : " · confirmed") : " · awaiting confirmation"}
               </p>
             )}
