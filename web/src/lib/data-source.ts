@@ -228,7 +228,7 @@ export async function publishReport(id: string, body: string): Promise<Report> {
   return toReport(await api<PartyView>(`/reports/${encodeURIComponent(id)}/publish`, { body: { body, keyHex: key } }));
 }
 
-export interface InvitePreview { reportId: string; title: string; from: string; severity: Severity; alreadyJoined: boolean; taken: boolean }
+export interface InvitePreview { reportId: string; title: string; from: string; fromName?: string; fromHandle?: string; severity: Severity; alreadyJoined: boolean; taken: boolean }
 export const previewInvite = (token: string) => (guard(), api<InvitePreview>(`/invites/${encodeURIComponent(token)}`));
 
 export async function redeemInvite(token: string): Promise<Report> {

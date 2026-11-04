@@ -11,6 +11,13 @@ import { previewInvite, redeemInvite } from "@/lib/data-source";
 import { useAsync } from "@/lib/use-async";
 import { severityTone } from "@/lib/report-stages";
 
+/** Display name or handle if present; otherwise a shortened hash like 5aedef7c…4a08ef2. */
+function inviterLabel(d: { from: string; fromName?: string; fromHandle?: string }): string {
+  const name = d.fromName?.trim() || (d.fromHandle?.trim() ? `@${d.fromHandle.trim().replace(/^@/, "")}` : "");
+  if (name) return name;
+  return d.from.length > 20 ? `${d.from.slice(0, 8)}…${d.from.slice(-7)}` : d.from;
+}
+
 /** Where an invite link lands. Shows who invited you and what, then joins on one click. */
 export function InviteRedeemPage() {
   const { token = "" } = useParams();
@@ -45,12 +52,12 @@ export function InviteRedeemPage() {
       ) : data && (
         <div className="space-y-5 card-hairline p-6">
           <div className="flex items-center gap-3">
-            <ProfileAvatar size="lg" name={data.from} />
-            <p className="text-subtitle"><span className="font-medium">{data.from}</span> invited you to a sealed report</p>
+            <ProfileAvatar size="lg" name={inviterLabel(data)} />
+            <p className="min-w-0 flex-1 break-words text-subtitle"><span className="inline-block max-w-full truncate align-bottom font-medium" title={data.from}>{inviterLabel(data)}</span> invited you to a sealed report</p>
           </div>
           <div className="flex flex-col items-start gap-2">
             <Badge color={severityTone[data.severity]} className="capitalize">{data.severity}</Badge>
-            <h1 className="text-title font-semibold leading-snug tracking-tight">{data.title}</h1>
+            <h1 className="break-words text-title font-semibold leading-snug tracking-tight">{data.title}</h1>
           </div>
           <p className="flex items-start gap-2 text-body text-muted-foreground"><Lock size={16} className="mt-0.5 shrink-0" /> The text is encrypted. After you join, the enclave checks your sign-in and releases the key to you.</p>
           {data.taken ? (
